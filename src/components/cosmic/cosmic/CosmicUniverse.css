@@ -1,0 +1,40 @@
+.cosmic-universe {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 12% 18%, rgba(88, 42, 168, .30), transparent 48%),
+    radial-gradient(ellipse at 88% 78%, rgba(18, 92, 158, .24), transparent 48%),
+    #050611;
+}
+.cosmic-universe__canvas,
+.cosmic-universe__details {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cosmic-universe__canvas { z-index: 0; }
+.cosmic-universe__details { z-index: 1; }
+/* Keep the cosmic background behind the app without turning ambient glows into flex items. */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background: transparent !important;
+}
+.app-shell > .sidebar,
+.app-shell > .main-area,
+.app-shell > .mobile-overlay {
+  position: relative;
+  z-index: 2;
+}
+@media (max-width: 700px) {
+  .cosmic-universe__details { opacity: .78; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cosmic-universe__details { opacity: .8; }
+}

@@ -26,3 +26,17 @@ dist-ssr
 .env
 .env.*
 !.env.example
+# MoleculeLab backup folders
+MoleculeLab-Backup-*/
+MoleculeLab-Support-Backup-*/
+
+# Python virtual environments
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+
+# Temporary development and backup scripts
+Install-MoleculeLab-Upgrade.ps1
+Update-MoleculeLab-Support-Commands*.ps1
+src/App.tsx.before-removing-support

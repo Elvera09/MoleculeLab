@@ -1,211 +1,883 @@
+import ResearchWorkspace from "./pages/ResearchWorkplace/ResearchWorkspace";
+import Intelligence from "./pages/Intelligence/Intelligence";
+import Analytics from "./pages/Analytics/Analytics";
+import PeriodicTable from "./pages/PeriodicTable/PeriodicTable";
+import CosmicUniverse from "./components/cosmic/cosmic/CosmicUniverse";
+import ScienceSuite from "./pages/ScienceSuite/ScienceSuite";
+import Visualizer from "./pages/Visualizer/Visualizer";
+import "./styles/MoleculeLabPremium.css";
+import Discovery from "./pages/Discovery/Discovery";
+import { useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  BrowserRouter,
+  NavLink,
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
+import {
+  Atom,
+  Search,
+  LayoutDashboard,
+  Compass,
+  Table2,
+  Orbit,
+  ChartNoAxesCombined,
+  PenTool,
+  BrainCircuit,
+  FlaskConical,
+  FolderKanban,
+  Settings,
+  UserRound,
+  BookOpen,
+  Save,
+  ChevronDown,
+  ArrowUpRight,
+  Sparkles,
+  Plus,
+  Menu,
+  X,
+  Database,
+  Clock3,
+  Command,
+  CircleHelp,
+} from "lucide-react";
+import "./App.css";
+import StructureStudio from "./pages/StructureStudio/StructureStudio";
+import SettingsPage from "./pages/Settings/Settings";
+import ComputationalLab from "./pages/ComputationalLab/ComputationalLab";
 
-import { useMemo, useState } from 'react'
-import './App.css'
+const modules = [
+  { name: "Overview", path: "/", icon: LayoutDashboard, group: "WORKSPACE" },
+  { name: "Discovery", path: "/discovery", icon: Compass, group: "EXPLORE" },
+  { name: "Periodic Universe", path: "/periodic-table", icon: Table2, group: "EXPLORE" },
+  { name: "3D Visualizer", path: "/visualizer", icon: Orbit, group: "EXPLORE" },
+  { name: "Molecular Analytics", path: "/analytics", icon: ChartNoAxesCombined, group: "ANALYZE" },
+  { name: "Structure Studio", path: "/structure-studio", icon: PenTool, group: "ANALYZE" },
+  { name: "AI Intelligence", path: "/intelligence", icon: BrainCircuit, group: "INTELLIGENCE" },
+  { name: "Computational Lab", path: "/computational-lab", icon: FlaskConical, group: "INTELLIGENCE" },
+  { name: "Research Workspace", path: "/research", icon: FolderKanban, group: "WORKSPACE" },
+];
 
-type ElementData = {
-  number: number
-  symbol: string
-  name: string
-  mass: string
-  category: string
-  group: string
-  period: number
-  configuration: string
+const pageInfo: Record<
+  string,
+  { title: string; description: string; icon: typeof Atom }
+> = {
+  "/discovery": {
+    title: "Molecular Discovery",
+    description: "Search and investigate molecular identities.",
+    icon: Compass,
+  },
+  "/periodic-table": {
+    title: "Periodic Universe",
+    description: "Explore all 118 chemical elements.",
+    icon: Table2,
+  },
+  "/visualizer": {
+    title: "3D Molecular Visualizer",
+    description: "Explore molecular geometry in three dimensions.",
+    icon: Orbit,
+  },
+  "/analytics": {
+    title: "Molecular Analytics",
+    description: "Investigate chemical descriptors and properties.",
+    icon: ChartNoAxesCombined,
+  },
+  "/structure-studio": {
+    title: "Structure Studio",
+    description: "Create and edit chemical structures.",
+    icon: PenTool,
+  },
+  "/intelligence": {
+    title: "AI Molecular Intelligence",
+    description: "Explore model-assisted molecular predictions.",
+    icon: BrainCircuit,
+  },
+  "/computational-lab": {
+    title: "Computational Chemistry Lab",
+    description: "Build and run scientific computations.",
+    icon: FlaskConical,
+  },
+  "/research": {
+    title: "Research Workspace",
+    description: "Organise molecules and research projects.",
+    icon: FolderKanban,
+  },
+  "/settings": {
+    title: "Laboratory Settings",
+    description: "Manage your workspace preferences.",
+    icon: Settings,
+  },
+  "/help": {
+    title: "Help & Support",
+    description: "Guides and practical help for using MoleculeLab.",
+    icon: CircleHelp,
+  },
+  "/profile": {
+    title: "Researcher Profile",
+    description: "Personalise your local researcher workspace.",
+    icon: UserRound,
+  },
+};
+
+type ResearcherProfile = {
+  name: string;
+  field: string;
+  institution: string;
+};
+
+const DEFAULT_PROFILE: ResearcherProfile = {
+  name: "Researcher",
+  field: "Molecular research",
+  institution: "",
+};
+
+function readResearcherProfile(): ResearcherProfile {
+  try {
+    const saved = localStorage.getItem("moleculelab-researcher-profile");
+    return saved ? { ...DEFAULT_PROFILE, ...JSON.parse(saved) } : DEFAULT_PROFILE;
+  } catch {
+    return DEFAULT_PROFILE;
+  }
 }
 
-const elements: ElementData[] = [
-  { number: 1, symbol: 'H', name: 'Hydrogen', mass: '1.008', category: 'Nonmetal', group: 'Reactive nonmetal', period: 1, configuration: '1s¹' },
-  { number: 2, symbol: 'He', name: 'Helium', mass: '4.0026', category: 'Noble gas', group: 'Noble gas', period: 1, configuration: '1s²' },
-  { number: 3, symbol: 'Li', name: 'Lithium', mass: '6.94', category: 'Alkali metal', group: 'Alkali metal', period: 2, configuration: '[He] 2s¹' },
-  { number: 4, symbol: 'Be', name: 'Beryllium', mass: '9.0122', category: 'Alkaline earth', group: 'Alkaline earth metal', period: 2, configuration: '[He] 2s²' },
-  { number: 5, symbol: 'B', name: 'Boron', mass: '10.81', category: 'Metalloid', group: 'Metalloid', period: 2, configuration: '[He] 2s² 2p¹' },
-  { number: 6, symbol: 'C', name: 'Carbon', mass: '12.011', category: 'Nonmetal', group: 'Reactive nonmetal', period: 2, configuration: '[He] 2s² 2p²' },
-  { number: 7, symbol: 'N', name: 'Nitrogen', mass: '14.007', category: 'Nonmetal', group: 'Reactive nonmetal', period: 2, configuration: '[He] 2s² 2p³' },
-  { number: 8, symbol: 'O', name: 'Oxygen', mass: '15.999', category: 'Nonmetal', group: 'Reactive nonmetal', period: 2, configuration: '[He] 2s² 2p⁴' },
-  { number: 9, symbol: 'F', name: 'Fluorine', mass: '18.998', category: 'Halogen', group: 'Halogen', period: 2, configuration: '[He] 2s² 2p⁵' },
-  { number: 10, symbol: 'Ne', name: 'Neon', mass: '20.180', category: 'Noble gas', group: 'Noble gas', period: 2, configuration: '[He] 2s² 2p⁶' },
-  { number: 11, symbol: 'Na', name: 'Sodium', mass: '22.990', category: 'Alkali metal', group: 'Alkali metal', period: 3, configuration: '[Ne] 3s¹' },
-  { number: 12, symbol: 'Mg', name: 'Magnesium', mass: '24.305', category: 'Alkaline earth', group: 'Alkaline earth metal', period: 3, configuration: '[Ne] 3s²' },
-  { number: 13, symbol: 'Al', name: 'Aluminium', mass: '26.982', category: 'Post-transition metal', group: 'Post-transition metal', period: 3, configuration: '[Ne] 3s² 3p¹' },
-  { number: 14, symbol: 'Si', name: 'Silicon', mass: '28.085', category: 'Metalloid', group: 'Metalloid', period: 3, configuration: '[Ne] 3s² 3p²' },
-  { number: 15, symbol: 'P', name: 'Phosphorus', mass: '30.974', category: 'Nonmetal', group: 'Reactive nonmetal', period: 3, configuration: '[Ne] 3s² 3p³' },
-  { number: 16, symbol: 'S', name: 'Sulfur', mass: '32.06', category: 'Nonmetal', group: 'Reactive nonmetal', period: 3, configuration: '[Ne] 3s² 3p⁴' },
-  { number: 17, symbol: 'Cl', name: 'Chlorine', mass: '35.45', category: 'Halogen', group: 'Halogen', period: 3, configuration: '[Ne] 3s² 3p⁵' },
-  { number: 18, symbol: 'Ar', name: 'Argon', mass: '39.948', category: 'Noble gas', group: 'Noble gas', period: 3, configuration: '[Ne] 3s² 3p⁶' },
-  { number: 19, symbol: 'K', name: 'Potassium', mass: '39.098', category: 'Alkali metal', group: 'Alkali metal', period: 4, configuration: '[Ar] 4s¹' },
-  { number: 20, symbol: 'Ca', name: 'Calcium', mass: '40.078', category: 'Alkaline earth', group: 'Alkaline earth metal', period: 4, configuration: '[Ar] 4s²' },
-]
+function initials(name: string) {
+  return name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "R";
+}
 
-const tabs = ['Overview', 'Explore', 'Workspace', 'About']
-
-function App() {
-  const [activeTab, setActiveTab] = useState('Overview')
-  const [search, setSearch] = useState('')
-  const [selected, setSelected] = useState<ElementData>(elements[5])
-
-  const filteredElements = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return elements
-    return elements.filter((element) =>
-      element.name.toLowerCase().includes(query) ||
-      element.symbol.toLowerCase().includes(query) ||
-      String(element.number) === query
-    )
-  }, [search])
+function Sidebar({ close, researcherName }: { close?: () => void; researcherName: string }) {
+  const groups = ["WORKSPACE", "EXPLORE", "ANALYZE", "INTELLIGENCE"];
 
   return (
-    <main className="app-shell">
-      <div className="cosmic-glow glow-one" />
-      <div className="cosmic-glow glow-two" />
-      <div className="star-field" />
+    <aside className="sidebar">
+      <NavLink to="/" className="brand" onClick={close}>
+        <span className="brand-symbol">
+          <Atom size={25} />
+        </span>
 
-      <header className="topbar">
-        <button className="brand" onClick={() => setActiveTab('Overview')}>
-          <span className="brand-mark">✦</span>
-          <span>MOLECULE<span className="brand-highlight">LAB</span></span>
-        </button>
+        <span className="brand-name">
+          Molecule<span>Lab</span>
+          <small>MOLECULAR INTELLIGENCE</small>
+        </span>
+      </NavLink>
 
-        <nav className="main-nav">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              className={activeTab === tab ? 'nav-item active' : 'nav-item'}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-        </nav>
+      <div className="workspace-switch">
+        <span className="workspace-avatar">
+          <Atom size={17} />
+        </span>
 
-        <div className="system-status">
-          <span className="status-dot" />
-          SCIENCE SYSTEM ONLINE
-        </div>
-      </header>
+        <span>
+          <b>My Laboratory</b>
+          <small>Personal workspace</small>
+        </span>
 
-      <section className="intro-section">
-        <div className="intro-copy">
-          <div className="eyebrow">
-            <span>✧</span> MOLECULAR INTELLIGENCE STUDIO
+        <ChevronDown size={15} />
+      </div>
+
+      <nav className="side-navigation">
+        {groups.map((group) => (
+          <div className="nav-group" key={group}>
+            <div className="nav-label">{group}</div>
+
+            {modules
+              .filter((item) => item.group === group)
+              .map((item) => {
+                const Icon = item.icon;
+
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    end={item.path === "/"}
+                    onClick={close}
+                    className={({ isActive }) =>
+                      `nav-link ${isActive ? "active" : ""}`
+                    }
+                  >
+                    <Icon size={17} strokeWidth={1.8} />
+                    <span>{item.name}</span>
+
+                    {item.name === "AI Intelligence" && (
+                      <span className="nav-new">AI</span>
+                    )}
+                  </NavLink>
+                );
+              })}
           </div>
+        ))}
+      </nav>
+
+      <div className="sidebar-bottom">
+        <div className="usage-card">
+          <div className="usage-heading">
+            <Sparkles size={15} /> LAB STATUS
+          </div>
+
+          <div className="usage-copy">
+            Your molecular universe is taking shape.
+          </div>
+
+          <div className="usage-line">
+            <span />
+          </div>
+
+          <small>Cosmic foundation Ãƒâ€šÃ‚Â· v1.0</small>
+        </div>
+
+        <NavLink
+          to="/settings"
+          onClick={close}
+          className={({ isActive }) =>
+            `nav-link ${isActive ? "active" : ""}`
+          }
+        >
+          <Settings size={17} />
+          Settings
+        </NavLink>
+
+        <NavLink to="/profile" onClick={close} className="profile profile-link" aria-label="Open researcher profile">
+          <div className="profile-avatar">{initials(researcherName)}</div>
+          <div>
+            <b>{researcherName}</b>
+            <small>Researcher profile</small>
+          </div>
+          <ChevronDown size={15} />
+        </NavLink>
+      </div>
+    </aside>
+  );
+}
+
+function Header({ onMenu, researcherName }: { onMenu: () => void; researcherName: string }) {
+  const location = useLocation();
+  const current = modules.find((m) => m.path === location.pathname);
+  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+
+  function handleSearch(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (query.trim()) {
+      navigate(`/discovery?q=${encodeURIComponent(query.trim())}`);
+    }
+  }
+
+  return (
+    <header className="topbar">
+      <button
+        className="mobile-menu icon-button"
+        onClick={onMenu}
+        aria-label="Open navigation"
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className="breadcrumb">
+        MOLECULELAB <span>/</span>{" "}
+        <b>
+          {current?.name ??
+            pageInfo[location.pathname]?.title ??
+            "Overview"}
+        </b>
+      </div>
+
+      <div className="header-actions">
+        <form className="global-search" onSubmit={handleSearch}>
+          <Search size={16} />
+
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search molecules or elements..."
+            aria-label="Search molecules or elements"
+          />
+
+          <kbd>
+            <Command size={11} /> K
+          </kbd>
+        </form>
+
+        <NavLink to="/profile" className="header-avatar" aria-label="Open researcher profile" title="Researcher profile">
+          {initials(researcherName)}
+        </NavLink>
+      </div>
+    </header>
+  );
+}
+
+function StarField() {
+  return (
+    <div className="star-field" aria-hidden="true">
+      {Array.from({ length: 48 }, (_, i) => (
+        <span
+          key={i}
+          className={`star star-${i % 6}`}
+          style={{
+            left: `${(i * 37 + 11) % 100}%`,
+            top: `${(i * 53 + 7) % 100}%`,
+            animationDelay: `${(i % 9) * -0.7}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function CosmicMolecule() {
+  return (
+    <div className="cosmic-molecule" aria-hidden="true">
+      <div className="molecule-halo" />
+      <div className="molecule-orbit orbit-a">
+        <span />
+      </div>
+      <div className="molecule-orbit orbit-b">
+        <span />
+      </div>
+      <div className="molecule-orbit orbit-c">
+        <span />
+      </div>
+      <div className="molecule-center">
+        <Atom size={72} strokeWidth={1} />
+      </div>
+      <span className="molecule-satellite satellite-a" />
+      <span className="molecule-satellite satellite-b" />
+      <span className="molecule-satellite satellite-c" />
+      <span className="molecule-satellite satellite-d" />
+      <div className="molecule-caption">MOLECULAR FIELD / 001</div>
+    </div>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  label,
+  value,
+  note,
+  accent,
+}: {
+  icon: typeof Atom;
+  label: string;
+  value: string;
+  note: string;
+  accent: string;
+}) {
+  return (
+    <motion.div
+      className={`metric-card ${accent}`}
+      whileHover={{ y: -5, scale: 1.015 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="metric-top">
+        <span>{label}</span>
+        <Icon size={19} />
+      </div>
+
+      <div className="metric-value">{value}</div>
+      <div className="metric-note">{note}</div>
+      <div className="metric-glow" />
+    </motion.div>
+  );
+}
+
+function Overview() {
+  const navigate = useNavigate();
+
+  const shortcuts = [
+    {
+      title: "Discover molecules",
+      desc: "Search chemical identities and structures",
+      icon: Search,
+      path: "/discovery",
+      colour: "cyan",
+    },
+    {
+      title: "Explore the elements",
+      desc: "Navigate the periodic universe",
+      icon: Table2,
+      path: "/periodic-table",
+      colour: "violet",
+    },
+    {
+      title: "Enter the 3D lab",
+      desc: "Inspect molecular geometry",
+      icon: Orbit,
+      path: "/visualizer",
+      colour: "blue",
+    },
+    {
+      title: "Analyse properties",
+      desc: "Explore molecular descriptors",
+      icon: ChartNoAxesCombined,
+      path: "/analytics",
+      colour: "pink",
+    },
+  ];
+
+  return (
+    <div className="page-content overview-page">
+      <StarField />
+
+      <section className="welcome-row">
+        <div>
+          <div className="eyebrow">
+            <span className="live-dot" /> YOUR SCIENTIFIC UNIVERSE
+          </div>
+
           <h1>
-            Explore the
-            <span className="gradient-heading"> chemistry of everything.</span>
+            Where molecules meet <span>possibility.</span>
           </h1>
+
           <p>
-            Enter a universe of elements, molecular structures and scientific
-            discovery. Explore the building blocks of matter.
+            A connected space to discover, visualise, investigate and
+            understand the molecular world.
           </p>
         </div>
 
-        <div className="intro-orbit" aria-label="Decorative atomic illustration">
-          <div className="orbit-ring ring-a" />
-          <div className="orbit-ring ring-b" />
-          <div className="orbit-ring ring-c" />
-          <div className="orbit-nucleus">✦</div>
-          <span className="orbit-electron electron-a">e⁻</span>
-          <span className="orbit-electron electron-b">e⁻</span>
-          <span className="orbit-electron electron-c">e⁻</span>
+        <motion.button
+          className="primary-button"
+          whileHover={{ y: -3 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={() => navigate("/discovery")}
+        >
+          <Plus size={17} /> Begin discovery <ArrowUpRight size={15} />
+        </motion.button>
+      </section>
+
+      <section className="hero-panel">
+        <div className="hero-nebula nebula-one" />
+        <div className="hero-nebula nebula-two" />
+        <div className="hero-grid" />
+
+        <div className="hero-copy">
+          <div className="hero-tag">
+            <Sparkles size={14} /> MOLECULAR INTELLIGENCE STUDIO
+          </div>
+
+          <h2>
+            Explore beyond
+            <br />
+            the <span>visible.</span>
+          </h2>
+
+          <p>
+            From atomic structures to molecular intelligence, your
+            scientific journey begins here.
+          </p>
+
+          <button
+            className="hero-button"
+            onClick={() => navigate("/discovery")}
+          >
+            Enter the universe <ArrowUpRight size={16} />
+          </button>
+
+          <div className="hero-footnote">
+            <span className="live-dot" /> A NEW SPACE FOR SCIENTIFIC
+            EXPLORATION
+          </div>
+        </div>
+
+        <CosmicMolecule />
+
+        <div className="hero-index">
+          FIELD 001 <span>ÃƒÂ¢Ã…â€œÃ‚Â¦</span> MOLECULELAB
         </div>
       </section>
 
-      <section className="explorer-section">
-        <div className="section-heading">
-          <div>
-            <span className="section-kicker">THE ELEMENTAL ARCHIVE</span>
-            <h2>Periodic <span>Universe</span></h2>
-            <p>Select an element to explore its atomic identity.</p>
-          </div>
-
-          <label className="element-search">
-            <span>⌕</span>
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search element, symbol or atomic number..."
-            />
-            <kbd>SEARCH</kbd>
-          </label>
+      <section className="section-heading">
+        <div>
+          <div className="eyebrow">THE LABORATORY</div>
+          <h2>Your universe at a glance</h2>
         </div>
 
-        <div className="explorer-layout">
-          <div className="periodic-panel">
-            <div className="panel-topline">
-              <span>ELEMENT DATABASE</span>
-              <span>{filteredElements.length} ELEMENTS DISPLAYED</span>
+        <span className="subtle-label">
+          CONNECTED SCIENTIFIC WORKSPACE
+        </span>
+      </section>
+
+      <section className="metrics-grid">
+        <MetricCard
+          icon={Database}
+          label="MOLECULAR ANALYSIS"
+          value="RDKit powered"
+          note="Calculate formula, molecular weight, LogP and more."
+          accent="metric-cyan"
+        />
+
+        <MetricCard
+          icon={Orbit}
+          label="3D VISUALISATION"
+          value="Explore structures"
+          note="Open the visualiser to inspect molecular geometry."
+          accent="metric-violet"
+        />
+
+        <MetricCard
+          icon={Table2}
+          label="PERIODIC UNIVERSE"
+          value="118 elements"
+          note="Explore the elements and their chemical information."
+          accent="metric-blue"
+        />
+
+        <MetricCard
+          icon={BrainCircuit}
+          label="RESEARCH TOOLS"
+          value="Connected workspace"
+          note="Discover, compare, analyse and organise your work."
+          accent="metric-pink"
+        />
+      </section>
+
+      <section className="lower-grid">
+        <div className="panel quick-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">CHOOSE YOUR PATH</span>
+              <h3>Explore the laboratory</h3>
             </div>
 
-            <div className="element-grid">
-              {filteredElements.map((element) => (
-                <button
-                  key={element.number}
-                  className={`element-tile ${element.category.toLowerCase().replaceAll(' ', '-')} ${selected.number === element.number ? 'selected' : ''}`}
-                  onClick={() => setSelected(element)}
-                  title={`${element.name} — atomic number ${element.number}`}
+            <Sparkles size={19} />
+          </div>
+
+          <div className="quick-links">
+            {shortcuts.map((item) => {
+              const Icon = item.icon;
+
+              return (
+                <NavLink
+                  to={item.path}
+                  className="quick-link"
+                  key={item.title}
                 >
-                  <span className="atomic-number">{element.number}</span>
-                  <strong>{element.symbol}</strong>
-                  <span className="element-name">{element.name}</span>
-                </button>
-              ))}
-              {filteredElements.length === 0 && (
-                <div className="empty-state">
-                  No matching elements. Try another search.
-                </div>
-              )}
+                  <span className={`quick-icon ${item.colour}`}>
+                    <Icon size={19} />
+                  </span>
+
+                  <span>
+                    <b>{item.title}</b>
+                    <small>{item.desc}</small>
+                  </span>
+
+                  <ArrowUpRight size={16} className="quick-arrow" />
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="panel activity-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="eyebrow">YOUR RESEARCH</span>
+              <h3>Laboratory activity</h3>
             </div>
 
-            <div className="legend">
-              <span><i className="legend-dot nonmetal-dot" /> Nonmetals</span>
-              <span><i className="legend-dot metal-dot" /> Metals</span>
-              <span><i className="legend-dot metalloid-dot" /> Metalloids</span>
-              <span><i className="legend-dot noble-dot" /> Noble gases</span>
-            </div>
+            <Clock3 size={18} />
           </div>
 
-          <aside className="element-details">
-            <div className="detail-topline">
-              <span>ELEMENT PROFILE</span>
-              <span className="live-tag"><i /> LIVE SELECTION</span>
+          <div className="activity-empty">
+            <div className="empty-orbit">
+              <Atom size={29} />
             </div>
 
-            <div className="detail-symbol">
-              <span>{selected.number}</span>
-              <strong>{selected.symbol}</strong>
-              <small>{selected.name}</small>
-            </div>
+            <b>Your next discovery awaits</b>
 
-            <div className="detail-category">{selected.category}</div>
+            <p>
+              Start with a molecule and build your own connected
+              research workspace.
+            </p>
 
-            <div className="property-list">
-              <div><span>Atomic number</span><strong>{selected.number}</strong></div>
-              <div><span>Atomic mass</span><strong>{selected.mass} u</strong></div>
-              <div><span>Period</span><strong>{selected.period}</strong></div>
-              <div><span>Classification</span><strong>{selected.group}</strong></div>
-              <div><span>Electron configuration</span><strong>{selected.configuration}</strong></div>
-            </div>
-
-            <div className="detail-note">
-              <span>✧</span>
-              <p>Select another element to update this scientific profile.</p>
-            </div>
-          </aside>
+            <button onClick={() => navigate("/discovery")}>
+              Start exploring <ArrowUpRight size={14} />
+            </button>
+          </div>
         </div>
       </section>
 
-      <section className="bottom-strip">
-        <div><span>01</span><strong>DISCOVER ELEMENTS</strong></div>
-        <div><span>02</span><strong>EXPLORE ATOMIC DATA</strong></div>
-        <div><span>03</span><strong>INVESTIGATE MATTER</strong></div>
-        <div><span>04</span><strong>UNLOCK MOLECULAR SCIENCE</strong></div>
-      </section>
-
-      <footer className="site-footer">
-        <span>MOLECULELAB · MOLECULAR INTELLIGENCE STUDIO</span>
-        <span>BUILT FOR SCIENTIFIC DISCOVERY ✦</span>
+      <footer className="app-footer">
+        <span>MOLECULELAB Ãƒâ€šÃ‚Â© 2026</span>
+        <span>
+          Designed for discovery <Atom size={13} />
+        </span>
       </footer>
-    </main>
-  )
+    </div>
+  );
 }
 
-export default App
+function ModulePage({
+  title,
+  description,
+  icon: Icon,
+}: {
+  title: string;
+  description: string;
+  icon: typeof Atom;
+}) {
+  return (
+    <div className="page-content module-page">
+      <StarField />
+
+      <div className="eyebrow">
+        <span className="live-dot" /> MOLECULELAB / LABORATORY
+      </div>
+
+      <div className="module-heading">
+        <span className="module-icon">
+          <Icon size={28} />
+        </span>
+
+        <div>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+      </div>
+
+      <div className="module-placeholder panel">
+        <div className="empty-orbit">
+          <Icon size={30} />
+        </div>
+
+        <h2>A new scientific space is taking shape.</h2>
+
+        <p>
+          This module is part of the MoleculeLab roadmap. Its
+          scientific tools and data connections will be implemented
+          in upcoming development stages.
+        </p>
+
+        <span className="development-label">
+          <span className="live-dot" /> INTERFACE FOUNDATION Ãƒâ€šÃ‚Â·
+          SCIENTIFIC FEATURES IN DEVELOPMENT
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function HelpPage() {
+  const navigate = useNavigate();
+  const guides = [
+    { title: "Discover a molecule", detail: "Open Discovery to search for a molecule by its name or chemical identity.", path: "/discovery", action: "Open Discovery", icon: Search },
+    { title: "Analyse molecular properties", detail: "Use Molecular Analytics to inspect calculated descriptors such as molecular weight, formula and LogP.", path: "/analytics", action: "Open Analytics", icon: ChartNoAxesCombined },
+    { title: "Visualise a structure", detail: "Open the 3D Visualizer to explore molecular geometry and structure.", path: "/visualizer", action: "Open Visualizer", icon: Orbit },
+    { title: "Explore the elements", detail: "Use Periodic Universe to browse the chemical elements.", path: "/periodic-table", action: "Open Periodic Universe", icon: Table2 },
+    { title: "Organise research", detail: "Use Research Workspace to keep your research work organised.", path: "/research", action: "Open Workspace", icon: FolderKanban },
+  ];
+
+  return (
+    <div className="page-content module-page support-page">
+      <StarField />
+      <div className="eyebrow"><span className="live-dot" /> MOLECULELAB / SUPPORT</div>
+      <div className="module-heading">
+        <span className="module-icon"><CircleHelp size={28} /></span>
+        <div><h1>Help & Support</h1><p>Quick guides to help you get more from your molecular workspace.</p></div>
+      </div>
+      <section className="support-intro panel">
+        <div className="support-intro-icon"><BookOpen size={23} /></div>
+        <div><span className="eyebrow">GETTING STARTED</span><h2>Welcome to your laboratory.</h2><p>Choose a guide below to jump directly to the relevant MoleculeLab tool. Some scientific capabilities depend on the connected chemistry engine and the data available in your workspace.</p></div>
+      </section>
+      <div className="support-guides">
+        {guides.map((guide) => {
+          const Icon = guide.icon;
+          return <article className="support-guide panel" key={guide.title}>
+            <span className="support-guide-icon"><Icon size={19} /></span>
+            <div className="support-guide-copy"><h3>{guide.title}</h3><p>{guide.detail}</p></div>
+            <button className="support-guide-action" onClick={() => navigate(guide.path)}>{guide.action}<ArrowUpRight size={14} /></button>
+          </article>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ProfilePage({ researcherName, onSave }: { researcherName: string; onSave: (profile: ResearcherProfile) => void }) {
+  const [profile, setProfile] = useState<ResearcherProfile>(() => readResearcherProfile());
+  const [saved, setSaved] = useState(false);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const cleanProfile = { ...profile, name: profile.name.trim() || "Researcher", field: profile.field.trim(), institution: profile.institution.trim() };
+    onSave(cleanProfile);
+    setProfile(cleanProfile);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2200);
+  }
+
+  return (
+    <div className="page-content module-page profile-page">
+      <StarField />
+      <div className="eyebrow"><span className="live-dot" /> MOLECULELAB / PERSONAL WORKSPACE</div>
+      <div className="module-heading">
+        <span className="module-icon"><UserRound size={28} /></span>
+        <div><h1>Researcher Profile</h1><p>Personalise the details shown in your local workspace.</p></div>
+      </div>
+      <div className="profile-layout">
+        <section className="profile-summary panel">
+          <div className="profile-large-avatar">{initials(researcherName)}</div>
+          <h2>{researcherName}</h2>
+          <p>Personal researcher workspace</p>
+          <span className="profile-local-note">Saved on this device only</span>
+        </section>
+        <form className="profile-editor panel" onSubmit={handleSubmit}>
+          <div className="panel-heading"><div><span className="eyebrow">YOUR DETAILS</span><h3>Edit profile</h3></div><UserRound size={19} /></div>
+          <label className="profile-field">Display name<input value={profile.name} maxLength={48} onChange={(event) => setProfile({ ...profile, name: event.target.value })} placeholder="Enter your display name" /></label>
+          <label className="profile-field">Research interest<input value={profile.field} maxLength={80} onChange={(event) => setProfile({ ...profile, field: event.target.value })} placeholder="e.g. Computational chemistry" /></label>
+          <label className="profile-field">Institution (optional)<input value={profile.institution} maxLength={100} onChange={(event) => setProfile({ ...profile, institution: event.target.value })} placeholder="Your institution or organisation" /></label>
+          <div className="profile-editor-footer"><span>{saved ? "Profile saved on this device." : "No login or online account is required."}</span><button className="primary-button" type="submit"><Save size={15} /> Save profile</button></div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AppLayout() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [researcherName, setResearcherName] = useState(() => readResearcherProfile().name);
+  const location = useLocation();
+
+  function saveResearcherProfile(profile: ResearcherProfile) {
+    localStorage.setItem("moleculelab-researcher-profile", JSON.stringify(profile));
+    setResearcherName(profile.name);
+  }
+
+  return (
+    <div className="app-shell">
+      <CosmicUniverse />
+
+      <div className="ambient ambient-left" />
+      <div className="ambient ambient-right" />
+
+      <Sidebar researcherName={researcherName} />
+
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            className="mobile-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setMenuOpen(false)}
+          >
+            <motion.div
+              className="mobile-sidebar"
+              initial={{ x: -290 }}
+              animate={{ x: 0 }}
+              exit={{ x: -290 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="icon-button close-menu"
+                onClick={() => setMenuOpen(false)}
+              >
+                <X size={20} />
+              </button>
+
+              <Sidebar close={() => setMenuOpen(false)} researcherName={researcherName} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <main className="main-area">
+        <Header onMenu={() => setMenuOpen(true)} researcherName={researcherName} />
+
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.25 }}
+          >
+            <Routes>
+              <Route
+                path="/structure-studio"
+                element={<StructureStudio />}
+              />
+
+              <Route
+                path="/research"
+                element={<ResearchWorkspace />}
+              />
+
+              <Route path="/suite" element={<ScienceSuite />} />
+
+              <Route path="/" element={<Overview />} />
+              <Route path="/help" element={<HelpPage />} />
+              <Route path="/profile" element={<ProfilePage researcherName={researcherName} onSave={saveResearcherProfile} />} />
+
+              <Route path="/discovery" element={<Discovery />} />
+
+              <Route
+                path="/intelligence"
+                element={<Intelligence />}
+              />
+
+              <Route path="/visualizer" element={<Visualizer />} />
+
+              <Route
+                path="/periodic-table"
+                element={<PeriodicTable />}
+              />
+
+              <Route path="/analytics" element={<Analytics />} />
+
+              <Route
+                path="/settings"
+                element={<SettingsPage />}
+              />
+
+              {/* COMPUTATIONAL CHEMISTRY LAB */}
+              <Route
+                path="/computational-lab"
+                element={<ComputationalLab />}
+              />
+
+              {Object.entries(pageInfo)
+                .filter(
+                  ([path]) =>
+                    ![
+                      "/discovery",
+                      "/visualizer",
+                      "/periodic-table",
+                      "/analytics",
+                      "/structure-studio",
+                      "/intelligence",
+                      "/research",
+                      "/settings",
+                      "/help",
+                      "/profile",
+                      "/computational-lab",
+                    ].includes(path)
+                )
+                .map(([path, info]) => (
+                  <Route
+                    key={path}
+                    path={path}
+                    element={<ModulePage {...info} />}
+                  />
+                ))}
+
+              <Route path="*" element={<Overview />} />
+            </Routes>
+          </motion.div>
+        </AnimatePresence>
+
+        <NavLink to="/help" className="help-float" title="Help and support" aria-label="Open Help and Support">
+          <CircleHelp size={18} />
+        </NavLink>
+      </main>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppLayout />
+    </BrowserRouter>
+  );
+}

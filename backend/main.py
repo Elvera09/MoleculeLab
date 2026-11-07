@@ -11,7 +11,7 @@ app = FastAPI(
     version="1.2.0"
 )
 
-aapp.add_middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://molecule-lab-xi.vercel.app",
@@ -24,18 +24,23 @@ aapp.add_middleware(
     allow_headers=["*"],
 )
 
+
 class MoleculeRequest(BaseModel):
     smiles: str
 
+
 class MolfileRequest(BaseModel):
     molfile: str
+
 
 class SimilarityRequest(BaseModel):
     smiles: str
     limit: int = 8
 
+
 class ScreenRequest(BaseModel):
     smiles: list[str]
+
 
 REFERENCE = [
     ("Aspirin", "CC(=O)OC1=CC=CC=C1C(=O)O"),
@@ -43,12 +48,13 @@ REFERENCE = [
     ("Ibuprofen", "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O"),
     ("Paracetamol", "CC(=O)NC1=CC=C(O)C=C1"),
     ("Naproxen", "COC1=CC2=CC=CC=C2C=C1C(C)C(=O)O"),
-    ("Theobromine", "Cn1c(=O)c2c(ncn2)nc1O"),
+    ("Theobromine", "Cn1c(=O)c2(ncn2)nc1O"),
     ("Theophylline", "Cn1c(=O)c2[nH]cnc2n(C)c1=O"),
     ("Benzoic acid", "O=C(O)c1ccccc1"),
     ("Phenacetin", "CCOc1ccc(NC(C)=O)cc1"),
     ("Acetylsalicylic acid", "CC(=O)OC1=CC=CC=C1C(=O)O")
 ]
+
 
 def parse(smiles):
     mol = Chem.MolFromSmiles(smiles.strip())
@@ -58,6 +64,7 @@ def parse(smiles):
             detail="RDKit could not parse this SMILES. Check the structure."
         )
     return mol
+
 
 def props(mol):
     return {
@@ -75,6 +82,7 @@ def props(mol):
         "source": "Calculated using RDKit"
     }
 
+
 @app.get("/")
 def home():
     return {
@@ -82,13 +90,16 @@ def home():
         "engine": "RDKit"
     }
 
+
 @app.get("/health")
 def health():
     return {"status": "healthy", "engine": "RDKit"}
 
+
 @app.post("/analyze")
 def analyze(request: MoleculeRequest):
     return props(parse(request.smiles))
+
 
 @app.post("/analyze-molfile")
 def analyze_molfile(request: MolfileRequest):
@@ -106,6 +117,7 @@ def analyze_molfile(request: MolfileRequest):
         )
 
     return props(mol)
+
 
 @app.post("/ai/similarity")
 def similarity(request: SimilarityRequest):
@@ -143,6 +155,7 @@ def similarity(request: SimilarityRequest):
         "results": found[:max(1, min(request.limit, 10))],
         "method": "Morgan radius-2 · 2048-bit · Tanimoto"
     }
+
 
 @app.post("/ai/screen")
 def screen(request: ScreenRequest):

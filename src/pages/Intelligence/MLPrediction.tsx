@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { BrainCircuit, Upload, Activity, AlertCircle, CheckCircle2, LoaderCircle, Info } from "lucide-react";
 import "./MLPrediction.css";
 
-const API = "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API_URL || "https://moleculelab.onrender.com";
 
 type TrainingResult = {
   property_name: string; rows_used: number; train_rows: number; test_rows: number;

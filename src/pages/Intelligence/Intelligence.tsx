@@ -13,8 +13,7 @@ import {
 } from "lucide-react";
 import "./Intelligence.css";
 
-const API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
-
+const API = "https://moleculelab.onrender.com";
 const EXAMPLES = [
   { name: "Aspirin", smiles: "CC(=O)OC1=CC=CC=C1C(=O)O" },
   { name: "Caffeine", smiles: "Cn1c(=O)c2c(ncn2C)n(C)c1=O" },

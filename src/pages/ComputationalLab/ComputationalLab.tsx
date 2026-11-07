@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   Atom,
@@ -14,7 +15,14 @@ import {
   Beaker,
   Layers3,
   Zap,
+  RefreshCw,
+  Activity,
 } from "lucide-react";
+import {
+  analyzeSmiles,
+  checkRDKitHealth,
+  type RDKitAnalysis,
+} from "../../services/rdkit";
 import "./ComputationalLab.css";
 
 type CalculationJob = {
@@ -29,6 +37,8 @@ type CalculationJob = {
   status: "Draft";
 };
 
+type EngineStatus = "checking" | "connected" | "offline";
+
 const STORAGE_KEY = "moleculelab.computational.jobs.v1";
 
 const presets = [
@@ -36,17 +46,32 @@ const presets = [
   { name: "Methane", formula: "CH₄", smiles: "C" },
   { name: "Ethanol", formula: "C₂H₆O", smiles: "CCO" },
   { name: "Benzene", formula: "C₆H₆", smiles: "c1ccccc1" },
-  { name: "Caffeine", formula: "C₈H₁₀N₄O₂", smiles: "Cn1c(=O)c2c(ncn2C)n(C)c1=O" },
-  { name: "Glucose", formula: "C₆H₁₂O₆", smiles: "C(C1C(C(C(C(O1)O)O)O)O)O" },
+  {
+    name: "Caffeine",
+    formula: "C₈H₁₀N₄O₂",
+    smiles: "Cn1c(=O)c2c(ncn2C)n(C)c1=O",
+  },
+  {
+    name: "Glucose",
+    formula: "C₆H₁₂O₆",
+    smiles: "C(C1C(C(C(C(O1)O)O)O)O)O",
+  },
 ];
 
 function loadJobs(): CalculationJob[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+
+    const parsed: unknown = JSON.parse(saved);
+    return Array.isArray(parsed) ? (parsed as CalculationJob[]) : [];
   } catch {
     return [];
   }
+}
+
+function formatValue(value: number, digits = 3): string {
+  return Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
 export default function ComputationalLab() {
@@ -56,39 +81,116 @@ export default function ComputationalLab() {
   const [basisSet, setBasisSet] = useState("6-31G(d)");
   const [charge, setCharge] = useState(0);
   const [multiplicity, setMultiplicity] = useState(1);
+
   const [jobs, setJobs] = useState<CalculationJob[]>(loadJobs);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+
+  const [engineStatus, setEngineStatus] = useState<EngineStatus>("checking");
+  const [analysis, setAnalysis] = useState<RDKitAnalysis | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState("");
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
+    } catch {
+      setMessage("Unable to save setups in this browser's local storage.");
+      setMessageType("error");
+    }
   }, [jobs]);
 
-  const selectPreset = (preset: typeof presets[number]) => {
+  useEffect(() => {
+    let active = true;
+
+    const checkEngine = async () => {
+      setEngineStatus("checking");
+      const healthy = await checkRDKitHealth();
+
+      if (active) {
+        setEngineStatus(healthy ? "connected" : "offline");
+      }
+    };
+
+    void checkEngine();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const showMessage = (text: string, type: "success" | "error") => {
+    setMessage(text);
+    setMessageType(type);
+  };
+
+  const selectPreset = (preset: (typeof presets)[number]) => {
     setMolecule(preset.name);
     setSmiles(preset.smiles);
     setCharge(0);
     setMultiplicity(1);
+    setAnalysis(null);
+    setAnalysisError("");
     setMessage("");
   };
 
-  const prepareJob = () => {
+  const runAnalysis = async () => {
     if (!molecule.trim()) {
-      setMessage("Please enter a molecule name.");
+      setAnalysisError("Enter a molecule name before analysing the structure.");
       return;
     }
 
     if (!smiles.trim()) {
-      setMessage("Please enter a SMILES structure.");
+      setAnalysisError("Enter a SMILES representation before analysing.");
+      return;
+    }
+
+    setAnalysisLoading(true);
+    setAnalysisError("");
+    setAnalysis(null);
+    setMessage("");
+
+    try {
+      const result = await analyzeSmiles(smiles.trim());
+      setAnalysis(result);
+      setEngineStatus("connected");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Molecular analysis failed. Please check the SMILES structure.";
+
+      setAnalysisError(errorMessage);
+
+      if (
+        errorMessage.toLowerCase().includes("connect") ||
+        errorMessage.toLowerCase().includes("backend")
+      ) {
+        setEngineStatus("offline");
+      }
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const prepareJob = () => {
+    if (!molecule.trim()) {
+      showMessage("Please enter a molecule name.", "error");
+      return;
+    }
+
+    if (!smiles.trim()) {
+      showMessage("Please enter a SMILES structure.", "error");
       return;
     }
 
     if (!Number.isInteger(charge)) {
-      setMessage("Charge must be a whole number.");
+      showMessage("Charge must be a whole number.", "error");
       return;
     }
 
     if (!Number.isInteger(multiplicity) || multiplicity < 1) {
-      setMessage("Multiplicity must be a positive whole number.");
+      showMessage("Multiplicity must be a positive whole number.", "error");
       return;
     }
 
@@ -105,7 +207,7 @@ export default function ComputationalLab() {
     };
 
     setJobs((previous) => [newJob, ...previous]);
-    setMessage("Calculation setup saved successfully.");
+    showMessage("Calculation setup saved. This is a saved configuration, not a completed calculation.", "success");
   };
 
   const deleteJob = (id: string) => {
@@ -120,10 +222,9 @@ export default function ComputationalLab() {
       calculationSetups: jobs,
     };
 
-    const blob = new Blob(
-      [JSON.stringify(data, null, 2)],
-      { type: "application/json" }
-    );
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
 
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -142,12 +243,20 @@ export default function ComputationalLab() {
     setBasisSet("6-31G(d)");
     setCharge(0);
     setMultiplicity(1);
+    setAnalysis(null);
+    setAnalysisError("");
     setMessage("");
   };
 
+  const engineLabel =
+    engineStatus === "connected"
+      ? "RDKit connected"
+      : engineStatus === "checking"
+        ? "Checking engine..."
+        : "RDKit unavailable";
+
   return (
     <div className="page-content computational-page">
-
       <div className="comp-ambient comp-ambient-one" />
       <div className="comp-ambient comp-ambient-two" />
 
@@ -159,11 +268,13 @@ export default function ComputationalLab() {
             MOLECULELAB / SCIENTIFIC COMPUTATION
           </div>
 
-          <h1>Computational <span>Lab.</span></h1>
+          <h1>
+            Computational <span>Lab.</span>
+          </h1>
 
           <p>
-            Configure molecular calculations, explore computational
-            methods and organise your scientific workflows.
+            Validate molecular structures, calculate molecular descriptors
+            and organise computational chemistry workflows.
           </p>
         </div>
 
@@ -190,8 +301,8 @@ export default function ComputationalLab() {
             <Cpu size={19} />
           </span>
           <div>
-            <small>COMPUTATION ENGINE</small>
-            <strong>Not connected</strong>
+            <small>RDKit ENGINE</small>
+            <strong>{engineStatus === "connected" ? "Connected" : engineStatus === "checking" ? "Checking..." : "Offline"}</strong>
           </div>
         </div>
 
@@ -200,20 +311,17 @@ export default function ComputationalLab() {
             <Layers3 size={19} />
           </span>
           <div>
-            <small>AVAILABLE METHODS</small>
-            <strong>3 methods</strong>
+            <small>MOLECULAR ANALYSIS</small>
+            <strong>Available</strong>
           </div>
         </div>
       </section>
 
       {/* MAIN WORKSPACE */}
       <div className="comp-workspace">
-
         <main className="comp-main">
-
           {/* MOLECULAR INPUT */}
           <section className="comp-panel">
-
             <div className="comp-section-heading">
               <span className="comp-section-icon">
                 <Atom size={21} />
@@ -231,7 +339,11 @@ export default function ComputationalLab() {
               <label>Molecule Name</label>
               <input
                 value={molecule}
-                onChange={(e) => setMolecule(e.target.value)}
+                onChange={(event) => {
+                  setMolecule(event.target.value);
+                  setAnalysis(null);
+                  setAnalysisError("");
+                }}
                 placeholder="Example: Benzene"
               />
             </div>
@@ -240,12 +352,16 @@ export default function ComputationalLab() {
               <label>SMILES Representation</label>
               <textarea
                 value={smiles}
-                onChange={(e) => setSmiles(e.target.value)}
+                onChange={(event) => {
+                  setSmiles(event.target.value);
+                  setAnalysis(null);
+                  setAnalysisError("");
+                }}
                 placeholder="Enter molecular SMILES..."
                 rows={3}
               />
               <small>
-                SMILES describes the molecular connectivity and structure.
+                SMILES describes molecular connectivity and structure.
               </small>
             </div>
 
@@ -259,9 +375,7 @@ export default function ComputationalLab() {
                 <button
                   key={preset.name}
                   type="button"
-                  className={`comp-preset ${
-                    molecule === preset.name ? "selected" : ""
-                  }`}
+                  className={`comp-preset ${molecule === preset.name ? "selected" : ""}`}
                   onClick={() => selectPreset(preset)}
                 >
                   <strong>{preset.formula}</strong>
@@ -269,11 +383,125 @@ export default function ComputationalLab() {
                 </button>
               ))}
             </div>
+
+            <div className="comp-actions">
+              <button
+                className="comp-prepare-button"
+                type="button"
+                onClick={runAnalysis}
+                disabled={analysisLoading || engineStatus === "checking"}
+              >
+                {analysisLoading ? (
+                  <RefreshCw size={17} className="comp-loading-icon" />
+                ) : (
+                  <Activity size={17} />
+                )}
+                {analysisLoading ? "Analysing Structure..." : "Validate & Analyse Molecule"}
+              </button>
+            </div>
+
+            {analysisError && (
+              <div className="comp-message" role="alert">
+                <CircleAlert size={17} />
+                {analysisError}
+              </div>
+            )}
+
+            {analysis && (
+              <div className="comp-message" role="status">
+                <CheckCircle2 size={17} />
+                Molecular structure validated successfully using RDKit.
+              </div>
+            )}
           </section>
+
+          {/* ANALYSIS RESULTS */}
+          {analysis && (
+            <section className="comp-panel">
+              <div className="comp-section-heading">
+                <span className="comp-section-icon cyan">
+                  <Activity size={21} />
+                </span>
+
+                <div>
+                  <h2>Molecular Analysis Results</h2>
+                  <p>Live results returned by the MoleculeLab RDKit engine.</p>
+                </div>
+
+                <span className="comp-step">RDKit</span>
+              </div>
+
+              <div className="comp-summary-item">
+                <span>Compound</span>
+                <strong>{analysis.name || molecule}</strong>
+              </div>
+
+              <div className="comp-summary-item">
+                <span>Molecular Formula</span>
+                <strong>{analysis.formula}</strong>
+              </div>
+
+              <div className="comp-summary-item">
+                <span>Canonical SMILES</span>
+                <strong style={{ overflowWrap: "anywhere", textAlign: "right" }}>
+                  {analysis.canonical_smiles}
+                </strong>
+              </div>
+
+              <div className="comp-config-grid">
+                <div className="comp-summary-item">
+                  <span>Molecular Weight</span>
+                  <strong>{formatValue(analysis.molecular_weight)} g/mol</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Exact Mass</span>
+                  <strong>{formatValue(analysis.exact_mass, 4)} Da</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>LogP</span>
+                  <strong>{formatValue(analysis.logp)}</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Topological Polar Surface Area</span>
+                  <strong>{formatValue(analysis.tpsa)} Å²</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Hydrogen Bond Donors</span>
+                  <strong>{analysis.h_bond_donors}</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Hydrogen Bond Acceptors</span>
+                  <strong>{analysis.h_bond_acceptors}</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Rotatable Bonds</span>
+                  <strong>{analysis.rotatable_bonds}</strong>
+                </div>
+
+                <div className="comp-summary-item">
+                  <span>Ring Count</span>
+                  <strong>{analysis.ring_count}</strong>
+                </div>
+              </div>
+
+              <div className="comp-info-note">
+                <CheckCircle2 size={17} />
+                <span>
+                  Source: {analysis.source || "RDKit"}. These are molecular
+                  descriptors, not DFT or Hartree–Fock calculation results.
+                </span>
+              </div>
+            </section>
+          )}
 
           {/* COMPUTATIONAL METHOD */}
           <section className="comp-panel">
-
             <div className="comp-section-heading">
               <span className="comp-section-icon violet">
                 <Cpu size={21} />
@@ -281,19 +509,16 @@ export default function ComputationalLab() {
 
               <div>
                 <h2>Computational Method</h2>
-                <p>Select the theoretical approach for your study.</p>
+                <p>Select the theoretical approach for your study setup.</p>
               </div>
 
               <span className="comp-step">02</span>
             </div>
 
             <div className="comp-method-grid">
-
               <button
                 type="button"
-                className={`comp-method ${
-                  method === "DFT" ? "active" : ""
-                }`}
+                className={`comp-method ${method === "DFT" ? "active" : ""}`}
                 onClick={() => setMethod("DFT")}
               >
                 <span className="comp-method-icon cyan">
@@ -308,9 +533,7 @@ export default function ComputationalLab() {
 
               <button
                 type="button"
-                className={`comp-method ${
-                  method === "Hartree-Fock" ? "active" : ""
-                }`}
+                className={`comp-method ${method === "Hartree-Fock" ? "active" : ""}`}
                 onClick={() => setMethod("Hartree-Fock")}
               >
                 <span className="comp-method-icon violet">
@@ -325,9 +548,7 @@ export default function ComputationalLab() {
 
               <button
                 type="button"
-                className={`comp-method ${
-                  method === "Molecular Mechanics" ? "active" : ""
-                }`}
+                className={`comp-method ${method === "Molecular Mechanics" ? "active" : ""}`}
                 onClick={() => setMethod("Molecular Mechanics")}
               >
                 <span className="comp-method-icon pink">
@@ -339,7 +560,6 @@ export default function ComputationalLab() {
                   Classical force-field modelling of molecular systems.
                 </span>
               </button>
-
             </div>
 
             {method !== "Molecular Mechanics" && (
@@ -347,7 +567,7 @@ export default function ComputationalLab() {
                 <label>Basis Set</label>
                 <select
                   value={basisSet}
-                  onChange={(e) => setBasisSet(e.target.value)}
+                  onChange={(event) => setBasisSet(event.target.value)}
                 >
                   <option value="STO-3G">STO-3G</option>
                   <option value="3-21G">3-21G</option>
@@ -359,11 +579,19 @@ export default function ComputationalLab() {
                 </select>
               </div>
             )}
+
+            <div className="comp-info-note">
+              <CircleAlert size={17} />
+              <span>
+                DFT, Hartree–Fock and Molecular Mechanics are currently
+                configuration options only. A separate calculation engine
+                must be integrated before these methods can execute.
+              </span>
+            </div>
           </section>
 
           {/* SYSTEM SETTINGS */}
           <section className="comp-panel">
-
             <div className="comp-section-heading">
               <span className="comp-section-icon pink">
                 <Settings2 size={21} />
@@ -378,14 +606,13 @@ export default function ComputationalLab() {
             </div>
 
             <div className="comp-config-grid">
-
               <div className="comp-field">
                 <label>Net Molecular Charge</label>
                 <input
                   type="number"
                   step="1"
                   value={charge}
-                  onChange={(e) => setCharge(Number(e.target.value))}
+                  onChange={(event) => setCharge(Number(event.target.value))}
                 />
                 <small>Neutral molecules have charge 0.</small>
               </div>
@@ -394,7 +621,7 @@ export default function ComputationalLab() {
                 <label>Spin Multiplicity</label>
                 <select
                   value={multiplicity}
-                  onChange={(e) => setMultiplicity(Number(e.target.value))}
+                  onChange={(event) => setMultiplicity(Number(event.target.value))}
                 >
                   <option value={1}>1 — Singlet</option>
                   <option value={2}>2 — Doublet</option>
@@ -405,19 +632,19 @@ export default function ComputationalLab() {
                 </select>
                 <small>Choose the intended electronic spin state.</small>
               </div>
-
             </div>
 
             <div className="comp-info-note">
               <CircleAlert size={17} />
               <span>
-                Ensure the charge and multiplicity are chemically
-                appropriate for the molecule before running a calculation.
+                Ensure the charge and multiplicity are chemically appropriate
+                for the molecule before using this configuration in a
+                compatible calculation engine.
               </span>
             </div>
           </section>
 
-          {/* ACTIONS */}
+          {/* SAVE SETUP ACTIONS */}
           <section className="comp-actions">
             <button
               className="comp-clear-button"
@@ -438,17 +665,19 @@ export default function ComputationalLab() {
           </section>
 
           {message && (
-            <div className="comp-message">
-              <CheckCircle2 size={17} />
+            <div className="comp-message" role="status">
+              {messageType === "success" ? (
+                <CheckCircle2 size={17} />
+              ) : (
+                <CircleAlert size={17} />
+              )}
               {message}
             </div>
           )}
-
         </main>
 
         {/* RIGHT SIDEBAR */}
         <aside className="comp-sidebar">
-
           <section className="comp-panel comp-summary">
             <div className="comp-section-heading">
               <span className="comp-section-icon">
@@ -490,7 +719,28 @@ export default function ComputationalLab() {
 
             <div className="comp-engine-status">
               <span className="comp-status-dot" />
-              Engine not connected
+              {engineLabel}
+            </div>
+
+            <button
+              className="comp-clear-button"
+              type="button"
+              onClick={async () => {
+                setEngineStatus("checking");
+                const healthy = await checkRDKitHealth();
+                setEngineStatus(healthy ? "connected" : "offline");
+              }}
+            >
+              <RefreshCw size={15} />
+              Check Engine
+            </button>
+
+            <div className="comp-info-note">
+              <CircleAlert size={16} />
+              <span>
+                RDKit handles structure validation and descriptors.
+                Quantum chemistry engines are not yet configured.
+              </span>
             </div>
           </section>
 
@@ -502,8 +752,8 @@ export default function ComputationalLab() {
             <h3>Scientific Workflow</h3>
 
             <p>
-              Prepare your molecular system, choose a method,
-              configure its electronic state and save the setup.
+              Validate a molecular structure, inspect its descriptors,
+              configure a theoretical method and save your setup.
             </p>
 
             <div className="comp-guide-step">
@@ -511,24 +761,22 @@ export default function ComputationalLab() {
             </div>
 
             <div className="comp-guide-step">
-              <span>02</span> Method selection
+              <span>02</span> RDKit structure analysis
             </div>
 
             <div className="comp-guide-step">
-              <span>03</span> System configuration
+              <span>03</span> Method configuration
             </div>
 
             <div className="comp-guide-step">
               <span>04</span> Save calculation setup
             </div>
           </section>
-
         </aside>
       </div>
 
       {/* SAVED JOBS */}
       <section className="comp-panel comp-history">
-
         <div className="comp-section-heading">
           <span className="comp-section-icon">
             <Clock size={21} />
@@ -567,7 +815,6 @@ export default function ComputationalLab() {
           <div className="comp-job-list">
             {jobs.map((job) => (
               <article className="comp-job-card" key={job.id}>
-
                 <div className="comp-job-molecule">
                   <Atom size={22} />
                 </div>
@@ -598,19 +845,16 @@ export default function ComputationalLab() {
                 >
                   <Trash2 size={17} />
                 </button>
-
               </article>
             ))}
           </div>
         )}
-
       </section>
 
       <footer className="comp-footer">
         <span>MOLECULELAB · COMPUTATIONAL CHEMISTRY</span>
         <span>SCIENTIFIC WORKSPACE / 001</span>
       </footer>
-
     </div>
   );
 }

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import "./Intelligence.css";
 
-const API = "http://127.0.0.1:8000";
+const API = (import.meta.env.VITE_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 const EXAMPLES = [
   { name: "Aspirin", smiles: "CC(=O)OC1=CC=CC=C1C(=O)O" },

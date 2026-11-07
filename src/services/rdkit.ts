@@ -89,3 +89,142 @@ export async function checkRDKitHealth(): Promise<boolean> {
     return false;
   }
 }
+export interface DatasetMolecule extends RDKitAnalysis {
+  id: string;
+  category: string;
+}
+
+export interface DatasetAnalysisResponse {
+  dataset: string;
+  total_molecules: number;
+  results: DatasetMolecule[];
+}
+
+export async function analyzeDataset(): Promise<DatasetAnalysisResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API}/dataset/analysis`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    throw new Error(
+      "Cannot connect to MoleculeLab Chemistry Engine. Check the backend connection."
+    );
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Dataset analysis failed."
+    );
+  }
+
+  return data as DatasetAnalysisResponse;
+}
+
+export interface DatasetSimilarityResult {
+  id: string;
+  name: string;
+  category: string;
+  formula: string;
+  similarity: number;
+  molecular_weight: number;
+  logp: number;
+}
+
+export interface DatasetSimilarityResponse {
+  results: DatasetSimilarityResult[];
+  method: string;
+  dataset_size: number;
+}
+
+export interface LipinskiResult {
+  id: string;
+  name: string;
+  category: string;
+  formula: string;
+  molecular_weight: number;
+  logp: number;
+  tpsa: number;
+  h_bond_donors: number;
+  h_bond_acceptors: number;
+  passes: boolean;
+  reasons: string[];
+}
+
+export interface LipinskiResponse {
+  results: LipinskiResult[];
+  total_molecules: number;
+  passing: number;
+  failing: number;
+  explanation: string;
+}
+
+export async function findDatasetSimilarity(
+  smiles: string
+): Promise<DatasetSimilarityResponse> {
+  const query = smiles.trim();
+
+  if (!query) {
+    throw new Error("Enter a valid SMILES structure.");
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(`${API}/dataset/similarity`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ smiles: query }),
+    });
+  } catch {
+    throw new Error("Cannot connect to the MoleculeLab Chemistry Engine.");
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Molecular similarity analysis failed."
+    );
+  }
+
+  return data as DatasetSimilarityResponse;
+}
+
+export async function screenDataset(): Promise<LipinskiResponse> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API}/dataset/screen`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new Error("Cannot connect to the MoleculeLab Chemistry Engine.");
+  }
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Lipinski screening failed."
+    );
+  }
+
+  return data as LipinskiResponse;
+}

@@ -1,251 +1,274 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Activity,
   Atom,
-  FlaskConical,
-  Cpu,
-  Settings2,
-  Database,
-  Plus,
-  Trash2,
-  Download,
-  Clock,
   CheckCircle2,
   CircleAlert,
-  Beaker,
-  Layers3,
-  Zap,
+  Database,
+  Download,
+  FlaskConical,
   RefreshCw,
-  Activity,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  XCircle,
 } from "lucide-react";
+
 import {
-  analyzeSmiles,
+  analyzeDataset,
   checkRDKitHealth,
-  type RDKitAnalysis,
+  findDatasetSimilarity,
+  screenDataset,
+  type DatasetMolecule,
+  type DatasetSimilarityResult,
+  type LipinskiResponse,
 } from "../../services/rdkit";
+
 import "./ComputationalLab.css";
 
-type CalculationJob = {
-  id: string;
-  molecule: string;
-  smiles: string;
-  method: string;
-  basisSet: string;
-  charge: number;
-  multiplicity: number;
-  createdAt: string;
-  status: "Draft";
-};
-
 type EngineStatus = "checking" | "connected" | "offline";
+type WorkspaceTab = "library" | "similarity" | "screening";
 
-const STORAGE_KEY = "moleculelab.computational.jobs.v1";
+const formatValue = (value: number, digits = 2) =>
+  Number.isFinite(value) ? value.toFixed(digits) : "—";
 
-const presets = [
-  { name: "Water", formula: "H₂O", smiles: "O" },
-  { name: "Methane", formula: "CH₄", smiles: "C" },
-  { name: "Ethanol", formula: "C₂H₆O", smiles: "CCO" },
-  { name: "Benzene", formula: "C₆H₆", smiles: "c1ccccc1" },
-  {
-    name: "Caffeine",
-    formula: "C₈H₁₀N₄O₂",
-    smiles: "Cn1c(=O)c2c(ncn2C)n(C)c1=O",
-  },
-  {
-    name: "Glucose",
-    formula: "C₆H₁₂O₆",
-    smiles: "C(C1C(C(C(C(O1)O)O)O)O)O",
-  },
-];
+function downloadCSV(rows: Record<string, string | number | boolean>[], filename: string) {
+  if (!rows.length) return;
 
-function loadJobs(): CalculationJob[] {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return [];
+  const headers = Object.keys(rows[0]);
+  const escapeCSV = (value: string | number | boolean) =>
+    `"${String(value).replace(/"/g, '""')}"`;
 
-    const parsed: unknown = JSON.parse(saved);
-    return Array.isArray(parsed) ? (parsed as CalculationJob[]) : [];
-  } catch {
-    return [];
-  }
-}
+  const csv = [
+    headers.map(escapeCSV).join(","),
+    ...rows.map((row) =>
+      headers.map((header) => escapeCSV(row[header])).join(",")
+    ),
+  ].join("\r\n");
 
-function formatValue(value: number, digits = 3): string {
-  return Number.isFinite(value) ? value.toFixed(digits) : "—";
+  const blob = new Blob(["\uFEFF", csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export default function ComputationalLab() {
-  const [molecule, setMolecule] = useState("");
-  const [smiles, setSmiles] = useState("");
-  const [method, setMethod] = useState("DFT");
-  const [basisSet, setBasisSet] = useState("6-31G(d)");
-  const [charge, setCharge] = useState(0);
-  const [multiplicity, setMultiplicity] = useState(1);
-
-  const [jobs, setJobs] = useState<CalculationJob[]>(loadJobs);
-  const [message, setMessage] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
-
+  const [dataset, setDataset] = useState<DatasetMolecule[]>([]);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("checking");
-  const [analysis, setAnalysis] = useState<RDKitAnalysis | null>(null);
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisError, setAnalysisError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("library");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const [similaritySmiles, setSimilaritySmiles] = useState("");
+  const [similarityResults, setSimilarityResults] =
+    useState<DatasetSimilarityResult[]>([]);
+  const [similarityLoading, setSimilarityLoading] = useState(false);
+  const [similarityError, setSimilarityError] = useState("");
+
+  const [screening, setScreening] = useState<LipinskiResponse | null>(null);
+  const [screeningLoading, setScreeningLoading] = useState(false);
+  const [screeningError, setScreeningError] = useState("");
+  const [screeningFilter, setScreeningFilter] = useState<"all" | "pass" | "fail">("all");
+
+  const loadWorkspace = async () => {
+    setLoading(true);
+    setError("");
+
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(jobs));
-    } catch {
-      setMessage("Unable to save setups in this browser's local storage.");
-      setMessageType("error");
+      const [datasetResponse, healthy] = await Promise.all([
+        analyzeDataset(),
+        checkRDKitHealth(),
+      ]);
+
+      setDataset(datasetResponse.results);
+      setEngineStatus(healthy ? "connected" : "offline");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load the molecular dataset."
+      );
+      setEngineStatus("offline");
+    } finally {
+      setLoading(false);
     }
-  }, [jobs]);
+  };
 
   useEffect(() => {
-    let active = true;
-
-    const checkEngine = async () => {
-      setEngineStatus("checking");
-      const healthy = await checkRDKitHealth();
-
-      if (active) {
-        setEngineStatus(healthy ? "connected" : "offline");
-      }
-    };
-
-    void checkEngine();
-
-    return () => {
-      active = false;
-    };
+    void loadWorkspace();
   }, []);
 
-  const showMessage = (text: string, type: "success" | "error") => {
-    setMessage(text);
-    setMessageType(type);
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(dataset.map((item) => item.category))).sort()],
+    [dataset]
+  );
+
+  const filteredDataset = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return dataset.filter((item) => {
+      const matchesCategory = category === "All" || item.category === category;
+      const matchesSearch =
+        !query ||
+        item.name.toLowerCase().includes(query) ||
+        item.formula.toLowerCase().includes(query) ||
+        item.canonical_smiles.toLowerCase().includes(query) ||
+        item.id.toLowerCase().includes(query);
+
+      return matchesCategory && matchesSearch;
+    });
+  }, [dataset, search, category]);
+
+  const selectedMolecules = useMemo(
+    () => dataset.filter((item) => selectedIds.includes(item.id)),
+    [dataset, selectedIds]
+  );
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds((previous) =>
+      previous.includes(id)
+        ? previous.filter((item) => item !== id)
+        : [...previous, id]
+    );
   };
 
-  const selectPreset = (preset: (typeof presets)[number]) => {
-    setMolecule(preset.name);
-    setSmiles(preset.smiles);
-    setCharge(0);
-    setMultiplicity(1);
-    setAnalysis(null);
-    setAnalysisError("");
-    setMessage("");
+  const selectVisible = () => {
+    const visibleIds = filteredDataset.map((item) => item.id);
+    setSelectedIds((previous) =>
+      Array.from(new Set([...previous, ...visibleIds]))
+    );
   };
 
-  const runAnalysis = async () => {
-    if (!molecule.trim()) {
-      setAnalysisError("Enter a molecule name before analysing the structure.");
+  const clearSelection = () => setSelectedIds([]);
+
+  const runSimilarity = async () => {
+    if (!similaritySmiles.trim()) {
+      setSimilarityError("Enter a SMILES structure to search for similar molecules.");
       return;
     }
 
-    if (!smiles.trim()) {
-      setAnalysisError("Enter a SMILES representation before analysing.");
-      return;
-    }
-
-    setAnalysisLoading(true);
-    setAnalysisError("");
-    setAnalysis(null);
-    setMessage("");
+    setSimilarityLoading(true);
+    setSimilarityError("");
+    setSimilarityResults([]);
 
     try {
-      const result = await analyzeSmiles(smiles.trim());
-      setAnalysis(result);
+      const response = await findDatasetSimilarity(similaritySmiles);
+      setSimilarityResults(response.results);
       setEngineStatus("connected");
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Molecular analysis failed. Please check the SMILES structure.";
-
-      setAnalysisError(errorMessage);
-
-      if (
-        errorMessage.toLowerCase().includes("connect") ||
-        errorMessage.toLowerCase().includes("backend")
-      ) {
-        setEngineStatus("offline");
-      }
+    } catch (err) {
+      setSimilarityError(
+        err instanceof Error ? err.message : "Similarity analysis failed."
+      );
     } finally {
-      setAnalysisLoading(false);
+      setSimilarityLoading(false);
     }
   };
 
-  const prepareJob = () => {
-    if (!molecule.trim()) {
-      showMessage("Please enter a molecule name.", "error");
-      return;
+  const runScreening = async () => {
+    setScreeningLoading(true);
+    setScreeningError("");
+
+    try {
+      const response = await screenDataset();
+      setScreening(response);
+      setEngineStatus("connected");
+    } catch (err) {
+      setScreeningError(
+        err instanceof Error ? err.message : "Lipinski screening failed."
+      );
+    } finally {
+      setScreeningLoading(false);
     }
-
-    if (!smiles.trim()) {
-      showMessage("Please enter a SMILES structure.", "error");
-      return;
-    }
-
-    if (!Number.isInteger(charge)) {
-      showMessage("Charge must be a whole number.", "error");
-      return;
-    }
-
-    if (!Number.isInteger(multiplicity) || multiplicity < 1) {
-      showMessage("Multiplicity must be a positive whole number.", "error");
-      return;
-    }
-
-    const newJob: CalculationJob = {
-      id: crypto.randomUUID(),
-      molecule: molecule.trim(),
-      smiles: smiles.trim(),
-      method,
-      basisSet: method === "Molecular Mechanics" ? "Not applicable" : basisSet,
-      charge,
-      multiplicity,
-      createdAt: new Date().toISOString(),
-      status: "Draft",
-    };
-
-    setJobs((previous) => [newJob, ...previous]);
-    showMessage("Calculation setup saved. This is a saved configuration, not a completed calculation.", "success");
   };
 
-  const deleteJob = (id: string) => {
-    setJobs((previous) => previous.filter((job) => job.id !== id));
+  useEffect(() => {
+    if (activeTab === "screening" && !screening && !screeningLoading) {
+      void runScreening();
+    }
+  }, [activeTab]);
+
+  const filteredScreening = useMemo(() => {
+    if (!screening) return [];
+    if (screeningFilter === "pass") {
+      return screening.results.filter((item) => item.passes);
+    }
+    if (screeningFilter === "fail") {
+      return screening.results.filter((item) => !item.passes);
+    }
+    return screening.results;
+  }, [screening, screeningFilter]);
+
+  const exportDataset = () => {
+    const rows = selectedMolecules.length ? selectedMolecules : dataset;
+
+    downloadCSV(
+      rows.map((item) => ({
+        ID: item.id,
+        Name: item.name,
+        Category: item.category,
+        Formula: item.formula,
+        SMILES: item.canonical_smiles,
+        Molecular_Weight: item.molecular_weight,
+        Exact_Mass: item.exact_mass,
+        LogP: item.logp,
+        TPSA: item.tpsa,
+        HBD: item.h_bond_donors,
+        HBA: item.h_bond_acceptors,
+        Rotatable_Bonds: item.rotatable_bonds,
+        Ring_Count: item.ring_count,
+      })),
+      selectedMolecules.length
+        ? "moleculelab-selected-molecules.csv"
+        : "moleculelab-dataset-analysis.csv"
+    );
   };
 
-  const exportJobs = () => {
-    const data = {
-      application: "MoleculeLab",
-      section: "Computational Chemistry Lab",
-      exportedAt: new Date().toISOString(),
-      calculationSetups: jobs,
-    };
+  const exportScreening = () => {
+    if (!screening) return;
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-
-    link.href = url;
-    link.download = "moleculelab-computational-jobs.json";
-    link.click();
-
-    URL.revokeObjectURL(url);
+    downloadCSV(
+      screening.results.map((item) => ({
+        ID: item.id,
+        Name: item.name,
+        Category: item.category,
+        Formula: item.formula,
+        Molecular_Weight: item.molecular_weight,
+        LogP: item.logp,
+        TPSA: item.tpsa,
+        HBD: item.h_bond_donors,
+        HBA: item.h_bond_acceptors,
+        Passes_Lipinski: item.passes,
+        Reasons: item.reasons.join("; "),
+      })),
+      "moleculelab-lipinski-screening.csv"
+    );
   };
 
-  const clearForm = () => {
-    setMolecule("");
-    setSmiles("");
-    setMethod("DFT");
-    setBasisSet("6-31G(d)");
-    setCharge(0);
-    setMultiplicity(1);
-    setAnalysis(null);
-    setAnalysisError("");
-    setMessage("");
+  const exportSimilarity = () => {
+    downloadCSV(
+      similarityResults.map((item) => ({
+        ID: item.id,
+        Name: item.name,
+        Category: item.category,
+        Formula: item.formula,
+        Tanimoto_Similarity: item.similarity,
+        Molecular_Weight: item.molecular_weight,
+        LogP: item.logp,
+      })),
+      "moleculelab-similarity-results.csv"
+    );
   };
 
   const engineLabel =
@@ -260,21 +283,18 @@ export default function ComputationalLab() {
       <div className="comp-ambient comp-ambient-one" />
       <div className="comp-ambient comp-ambient-two" />
 
-      {/* HEADER */}
       <header className="comp-header">
         <div>
           <div className="comp-eyebrow">
             <span className="comp-live-dot" />
             MOLECULELAB / SCIENTIFIC COMPUTATION
           </div>
-
           <h1>
             Computational <span>Lab.</span>
           </h1>
-
           <p>
-            Validate molecular structures, calculate molecular descriptors
-            and organise computational chemistry workflows.
+            Explore a curated molecular dataset, calculate chemical descriptors,
+            investigate structural similarity and screen molecular properties.
           </p>
         </div>
 
@@ -284,22 +304,17 @@ export default function ComputationalLab() {
         </div>
       </header>
 
-      {/* STATUS CARDS */}
       <section className="comp-stats">
         <div className="comp-stat-card">
-          <span className="comp-stat-icon cyan">
-            <Database size={19} />
-          </span>
+          <span className="comp-stat-icon cyan"><Database size={19} /></span>
           <div>
-            <small>SAVED SETUPS</small>
-            <strong>{jobs.length}</strong>
+            <small>CURATED DATASET</small>
+            <strong>{loading ? "Loading..." : `${dataset.length} molecules`}</strong>
           </div>
         </div>
 
         <div className="comp-stat-card">
-          <span className="comp-stat-icon violet">
-            <Cpu size={19} />
-          </span>
+          <span className="comp-stat-icon violet"><Activity size={19} /></span>
           <div>
             <small>RDKit ENGINE</small>
             <strong>{engineStatus === "connected" ? "Connected" : engineStatus === "checking" ? "Checking..." : "Offline"}</strong>
@@ -307,549 +322,388 @@ export default function ComputationalLab() {
         </div>
 
         <div className="comp-stat-card">
-          <span className="comp-stat-icon pink">
-            <Layers3 size={19} />
-          </span>
+          <span className="comp-stat-icon pink"><Target size={19} /></span>
           <div>
-            <small>MOLECULAR ANALYSIS</small>
-            <strong>Available</strong>
+            <small>SELECTED MOLECULES</small>
+            <strong>{selectedIds.length}</strong>
           </div>
         </div>
       </section>
 
-      {/* MAIN WORKSPACE */}
-      <div className="comp-workspace">
-        <main className="comp-main">
-          {/* MOLECULAR INPUT */}
-          <section className="comp-panel">
-            <div className="comp-section-heading">
-              <span className="comp-section-icon">
-                <Atom size={21} />
-              </span>
-
-              <div>
-                <h2>Molecular Input</h2>
-                <p>Define the molecule for your computational study.</p>
-              </div>
-
-              <span className="comp-step">01</span>
-            </div>
-
-            <div className="comp-field">
-              <label>Molecule Name</label>
-              <input
-                value={molecule}
-                onChange={(event) => {
-                  setMolecule(event.target.value);
-                  setAnalysis(null);
-                  setAnalysisError("");
-                }}
-                placeholder="Example: Benzene"
-              />
-            </div>
-
-            <div className="comp-field">
-              <label>SMILES Representation</label>
-              <textarea
-                value={smiles}
-                onChange={(event) => {
-                  setSmiles(event.target.value);
-                  setAnalysis(null);
-                  setAnalysisError("");
-                }}
-                placeholder="Enter molecular SMILES..."
-                rows={3}
-              />
-              <small>
-                SMILES describes molecular connectivity and structure.
-              </small>
-            </div>
-
-            <div className="comp-presets-heading">
-              <span>QUICK MOLECULE PRESETS</span>
-              <span>SELECT TO LOAD</span>
-            </div>
-
-            <div className="comp-presets">
-              {presets.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  className={`comp-preset ${molecule === preset.name ? "selected" : ""}`}
-                  onClick={() => selectPreset(preset)}
-                >
-                  <strong>{preset.formula}</strong>
-                  <span>{preset.name}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="comp-actions">
-              <button
-                className="comp-prepare-button"
-                type="button"
-                onClick={runAnalysis}
-                disabled={analysisLoading || engineStatus === "checking"}
-              >
-                {analysisLoading ? (
-                  <RefreshCw size={17} className="comp-loading-icon" />
-                ) : (
-                  <Activity size={17} />
-                )}
-                {analysisLoading ? "Analysing Structure..." : "Validate & Analyse Molecule"}
-              </button>
-            </div>
-
-            {analysisError && (
-              <div className="comp-message" role="alert">
-                <CircleAlert size={17} />
-                {analysisError}
-              </div>
-            )}
-
-            {analysis && (
-              <div className="comp-message" role="status">
-                <CheckCircle2 size={17} />
-                Molecular structure validated successfully using RDKit.
-              </div>
-            )}
-          </section>
-
-          {/* ANALYSIS RESULTS */}
-          {analysis && (
-            <section className="comp-panel">
-              <div className="comp-section-heading">
-                <span className="comp-section-icon cyan">
-                  <Activity size={21} />
-                </span>
-
-                <div>
-                  <h2>Molecular Analysis Results</h2>
-                  <p>Live results returned by the MoleculeLab RDKit engine.</p>
-                </div>
-
-                <span className="comp-step">RDKit</span>
-              </div>
-
-              <div className="comp-summary-item">
-                <span>Compound</span>
-                <strong>{analysis.name || molecule}</strong>
-              </div>
-
-              <div className="comp-summary-item">
-                <span>Molecular Formula</span>
-                <strong>{analysis.formula}</strong>
-              </div>
-
-              <div className="comp-summary-item">
-                <span>Canonical SMILES</span>
-                <strong style={{ overflowWrap: "anywhere", textAlign: "right" }}>
-                  {analysis.canonical_smiles}
-                </strong>
-              </div>
-
-              <div className="comp-config-grid">
-                <div className="comp-summary-item">
-                  <span>Molecular Weight</span>
-                  <strong>{formatValue(analysis.molecular_weight)} g/mol</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Exact Mass</span>
-                  <strong>{formatValue(analysis.exact_mass, 4)} Da</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>LogP</span>
-                  <strong>{formatValue(analysis.logp)}</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Topological Polar Surface Area</span>
-                  <strong>{formatValue(analysis.tpsa)} Å²</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Hydrogen Bond Donors</span>
-                  <strong>{analysis.h_bond_donors}</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Hydrogen Bond Acceptors</span>
-                  <strong>{analysis.h_bond_acceptors}</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Rotatable Bonds</span>
-                  <strong>{analysis.rotatable_bonds}</strong>
-                </div>
-
-                <div className="comp-summary-item">
-                  <span>Ring Count</span>
-                  <strong>{analysis.ring_count}</strong>
-                </div>
-              </div>
-
-              <div className="comp-info-note">
-                <CheckCircle2 size={17} />
-                <span>
-                  Source: {analysis.source || "RDKit"}. These are molecular
-                  descriptors, not DFT or Hartree–Fock calculation results.
-                </span>
-              </div>
-            </section>
-          )}
-
-          {/* COMPUTATIONAL METHOD */}
-          <section className="comp-panel">
-            <div className="comp-section-heading">
-              <span className="comp-section-icon violet">
-                <Cpu size={21} />
-              </span>
-
-              <div>
-                <h2>Computational Method</h2>
-                <p>Select the theoretical approach for your study setup.</p>
-              </div>
-
-              <span className="comp-step">02</span>
-            </div>
-
-            <div className="comp-method-grid">
-              <button
-                type="button"
-                className={`comp-method ${method === "DFT" ? "active" : ""}`}
-                onClick={() => setMethod("DFT")}
-              >
-                <span className="comp-method-icon cyan">
-                  <Atom size={22} />
-                </span>
-                <strong>Density Functional Theory</strong>
-                <small>DFT</small>
-                <span className="comp-method-description">
-                  Electronic structure calculations using electron density.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={`comp-method ${method === "Hartree-Fock" ? "active" : ""}`}
-                onClick={() => setMethod("Hartree-Fock")}
-              >
-                <span className="comp-method-icon violet">
-                  <Layers3 size={22} />
-                </span>
-                <strong>Hartree–Fock</strong>
-                <small>HF</small>
-                <span className="comp-method-description">
-                  An approximate quantum mechanical electronic structure method.
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className={`comp-method ${method === "Molecular Mechanics" ? "active" : ""}`}
-                onClick={() => setMethod("Molecular Mechanics")}
-              >
-                <span className="comp-method-icon pink">
-                  <Zap size={22} />
-                </span>
-                <strong>Molecular Mechanics</strong>
-                <small>MM</small>
-                <span className="comp-method-description">
-                  Classical force-field modelling of molecular systems.
-                </span>
-              </button>
-            </div>
-
-            {method !== "Molecular Mechanics" && (
-              <div className="comp-field">
-                <label>Basis Set</label>
-                <select
-                  value={basisSet}
-                  onChange={(event) => setBasisSet(event.target.value)}
-                >
-                  <option value="STO-3G">STO-3G</option>
-                  <option value="3-21G">3-21G</option>
-                  <option value="6-31G">6-31G</option>
-                  <option value="6-31G(d)">6-31G(d)</option>
-                  <option value="6-31+G(d,p)">6-31+G(d,p)</option>
-                  <option value="def2-SVP">def2-SVP</option>
-                  <option value="def2-TZVP">def2-TZVP</option>
-                </select>
-              </div>
-            )}
-
-            <div className="comp-info-note">
-              <CircleAlert size={17} />
-              <span>
-                DFT, Hartree–Fock and Molecular Mechanics are currently
-                configuration options only. A separate calculation engine
-                must be integrated before these methods can execute.
-              </span>
-            </div>
-          </section>
-
-          {/* SYSTEM SETTINGS */}
-          <section className="comp-panel">
-            <div className="comp-section-heading">
-              <span className="comp-section-icon pink">
-                <Settings2 size={21} />
-              </span>
-
-              <div>
-                <h2>System Configuration</h2>
-                <p>Define the electronic state of your molecular system.</p>
-              </div>
-
-              <span className="comp-step">03</span>
-            </div>
-
-            <div className="comp-config-grid">
-              <div className="comp-field">
-                <label>Net Molecular Charge</label>
-                <input
-                  type="number"
-                  step="1"
-                  value={charge}
-                  onChange={(event) => setCharge(Number(event.target.value))}
-                />
-                <small>Neutral molecules have charge 0.</small>
-              </div>
-
-              <div className="comp-field">
-                <label>Spin Multiplicity</label>
-                <select
-                  value={multiplicity}
-                  onChange={(event) => setMultiplicity(Number(event.target.value))}
-                >
-                  <option value={1}>1 — Singlet</option>
-                  <option value={2}>2 — Doublet</option>
-                  <option value={3}>3 — Triplet</option>
-                  <option value={4}>4 — Quartet</option>
-                  <option value={5}>5 — Quintet</option>
-                  <option value={6}>6 — Sextet</option>
-                </select>
-                <small>Choose the intended electronic spin state.</small>
-              </div>
-            </div>
-
-            <div className="comp-info-note">
-              <CircleAlert size={17} />
-              <span>
-                Ensure the charge and multiplicity are chemically appropriate
-                for the molecule before using this configuration in a
-                compatible calculation engine.
-              </span>
-            </div>
-          </section>
-
-          {/* SAVE SETUP ACTIONS */}
-          <section className="comp-actions">
-            <button
-              className="comp-clear-button"
-              type="button"
-              onClick={clearForm}
-            >
-              Clear Form
-            </button>
-
-            <button
-              className="comp-prepare-button"
-              type="button"
-              onClick={prepareJob}
-            >
-              <Plus size={17} />
-              Save Calculation Setup
-            </button>
-          </section>
-
-          {message && (
-            <div className="comp-message" role="status">
-              {messageType === "success" ? (
-                <CheckCircle2 size={17} />
-              ) : (
-                <CircleAlert size={17} />
-              )}
-              {message}
-            </div>
-          )}
-        </main>
-
-        {/* RIGHT SIDEBAR */}
-        <aside className="comp-sidebar">
-          <section className="comp-panel comp-summary">
-            <div className="comp-section-heading">
-              <span className="comp-section-icon">
-                <Beaker size={20} />
-              </span>
-
-              <div>
-                <h2>Calculation Summary</h2>
-                <p>Current configuration.</p>
-              </div>
-            </div>
-
-            <div className="comp-summary-item">
-              <span>Molecule</span>
-              <strong>{molecule || "Not selected"}</strong>
-            </div>
-
-            <div className="comp-summary-item">
-              <span>Method</span>
-              <strong>{method}</strong>
-            </div>
-
-            <div className="comp-summary-item">
-              <span>Basis Set</span>
-              <strong>
-                {method === "Molecular Mechanics" ? "N/A" : basisSet}
-              </strong>
-            </div>
-
-            <div className="comp-summary-item">
-              <span>Charge</span>
-              <strong>{charge}</strong>
-            </div>
-
-            <div className="comp-summary-item">
-              <span>Multiplicity</span>
-              <strong>{multiplicity}</strong>
-            </div>
-
-            <div className="comp-engine-status">
-              <span className="comp-status-dot" />
-              {engineLabel}
-            </div>
-
-            <button
-              className="comp-clear-button"
-              type="button"
-              onClick={async () => {
-                setEngineStatus("checking");
-                const healthy = await checkRDKitHealth();
-                setEngineStatus(healthy ? "connected" : "offline");
-              }}
-            >
-              <RefreshCw size={15} />
-              Check Engine
-            </button>
-
-            <div className="comp-info-note">
-              <CircleAlert size={16} />
-              <span>
-                RDKit handles structure validation and descriptors.
-                Quantum chemistry engines are not yet configured.
-              </span>
-            </div>
-          </section>
-
-          <section className="comp-panel comp-guide">
-            <span className="comp-guide-icon">
-              <FlaskConical size={23} />
-            </span>
-
-            <h3>Scientific Workflow</h3>
-
-            <p>
-              Validate a molecular structure, inspect its descriptors,
-              configure a theoretical method and save your setup.
-            </p>
-
-            <div className="comp-guide-step">
-              <span>01</span> Molecular input
-            </div>
-
-            <div className="comp-guide-step">
-              <span>02</span> RDKit structure analysis
-            </div>
-
-            <div className="comp-guide-step">
-              <span>03</span> Method configuration
-            </div>
-
-            <div className="comp-guide-step">
-              <span>04</span> Save calculation setup
-            </div>
-          </section>
-        </aside>
+      <div className="comp-engine-banner">
+        <span className={`comp-engine-indicator ${engineStatus}`} />
+        <span>{engineLabel}</span>
+        <button type="button" onClick={() => void loadWorkspace()}>
+          <RefreshCw size={14} /> Refresh dataset
+        </button>
       </div>
 
-      {/* SAVED JOBS */}
-      <section className="comp-panel comp-history">
-        <div className="comp-section-heading">
-          <span className="comp-section-icon">
-            <Clock size={21} />
-          </span>
-
-          <div>
-            <h2>Calculation Workspace</h2>
-            <p>Your saved calculation configurations.</p>
-          </div>
-
-          <button
-            className="comp-export-button"
-            type="button"
-            onClick={exportJobs}
-            disabled={jobs.length === 0}
-          >
-            <Download size={16} />
-            Export
-          </button>
+      {error && (
+        <div className="comp-message comp-error" role="alert">
+          <CircleAlert size={17} /> {error}
         </div>
+      )}
 
-        {jobs.length === 0 ? (
-          <div className="comp-empty">
-            <div className="comp-empty-icon">
-              <Atom size={29} />
+      <nav className="comp-tabs" aria-label="Computational Lab tools">
+        <button
+          type="button"
+          className={activeTab === "library" ? "active" : ""}
+          onClick={() => setActiveTab("library")}
+        >
+          <Database size={16} /> Dataset & Descriptors
+        </button>
+        <button
+          type="button"
+          className={activeTab === "similarity" ? "active" : ""}
+          onClick={() => setActiveTab("similarity")}
+        >
+          <Sparkles size={16} /> Similarity Search
+        </button>
+        <button
+          type="button"
+          className={activeTab === "screening" ? "active" : ""}
+          onClick={() => setActiveTab("screening")}
+        >
+          <ShieldCheck size={16} /> Lipinski Screening
+        </button>
+      </nav>
+
+      {activeTab === "library" && (
+        <section className="comp-panel comp-dataset-panel">
+          <div className="comp-section-heading">
+            <span className="comp-section-icon"><Atom size={21} /></span>
+            <div>
+              <h2>Curated Molecular Dataset</h2>
+              <p>RDKit-calculated descriptors for every molecule in the library.</p>
             </div>
-
-            <h3>No calculation setups yet</h3>
-
-            <p>
-              Configure a molecule above and save your first
-              computational setup.
-            </p>
+            <span className="comp-step">{dataset.length} RECORDS</span>
           </div>
-        ) : (
-          <div className="comp-job-list">
-            {jobs.map((job) => (
-              <article className="comp-job-card" key={job.id}>
-                <div className="comp-job-molecule">
-                  <Atom size={22} />
-                </div>
 
-                <div className="comp-job-details">
-                  <strong>{job.molecule}</strong>
-                  <span>{job.smiles}</span>
-                  <small>
-                    {job.method} · {job.basisSet}
-                  </small>
-                  <small>
-                    Charge: {job.charge} · Multiplicity: {job.multiplicity}
-                  </small>
-                </div>
+          <div className="comp-toolbar">
+            <div className="comp-search">
+              <Search size={17} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, formula, ID or SMILES..."
+              />
+            </div>
+            <select
+              className="comp-filter-select"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              aria-label="Filter by category"
+            >
+              {categories.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+          </div>
 
-                <div className="comp-job-status">
-                  <span>Draft</span>
-                  <small>
-                    {new Date(job.createdAt).toLocaleDateString()}
-                  </small>
-                </div>
+          <div className="comp-selection-toolbar">
+            <span>{selectedIds.length} selected · {filteredDataset.length} visible</span>
+            <div>
+              <button type="button" onClick={selectVisible}>Select visible</button>
+              <button type="button" onClick={clearSelection}>Clear selection</button>
+              <button
+                type="button"
+                className="comp-export-button"
+                onClick={exportDataset}
+                disabled={dataset.length === 0}
+              >
+                <Download size={15} /> Export CSV
+              </button>
+            </div>
+          </div>
 
-                <button
-                  className="comp-delete-button"
-                  type="button"
-                  onClick={() => deleteJob(job.id)}
-                  aria-label={`Delete ${job.molecule} setup`}
-                >
-                  <Trash2 size={17} />
+          {loading ? (
+            <div className="comp-loading-state">
+              <RefreshCw className="comp-loading-icon" size={24} />
+              <span>Calculating molecular descriptors...</span>
+            </div>
+          ) : filteredDataset.length === 0 ? (
+            <div className="comp-empty">
+              <Search size={27} />
+              <h3>No molecules found</h3>
+              <p>Try another search term or category.</p>
+            </div>
+          ) : (
+            <div className="comp-table-wrap">
+              <table className="comp-data-table">
+                <thead>
+                  <tr>
+                    <th>Select</th>
+                    <th>Molecule</th>
+                    <th>Formula</th>
+                    <th>Category</th>
+                    <th>MW (g/mol)</th>
+                    <th>LogP</th>
+                    <th>TPSA (Å²)</th>
+                    <th>HBD / HBA</th>
+                    <th>Rings</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDataset.map((item) => (
+                    <tr key={item.id} className={selectedIds.includes(item.id) ? "selected" : ""}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(item.id)}
+                          onChange={() => toggleSelection(item.id)}
+                          aria-label={`Select ${item.name}`}
+                        />
+                      </td>
+                      <td>
+                        <div className="comp-molecule-name">
+                          <strong>{item.name}</strong>
+                          <small>{item.id}</small>
+                        </div>
+                      </td>
+                      <td>{item.formula}</td>
+                      <td><span className="comp-category-tag">{item.category}</span></td>
+                      <td>{formatValue(item.molecular_weight, 3)}</td>
+                      <td>{formatValue(item.logp, 3)}</td>
+                      <td>{formatValue(item.tpsa, 2)}</td>
+                      <td>{item.h_bond_donors} / {item.h_bond_acceptors}</td>
+                      <td>{item.ring_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="comp-dataset-footnote">
+            <CheckCircle2 size={15} />
+            Descriptor values are calculated by RDKit from the molecular structures.
+            They are computational descriptors, not experimental measurements.
+          </div>
+
+          {selectedMolecules.length > 0 && (
+            <div className="comp-selection-summary">
+              <strong>Selected molecules</strong>
+              <div>
+                {selectedMolecules.map((item) => (
+                  <span key={item.id}>{item.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === "similarity" && (
+        <section className="comp-panel">
+          <div className="comp-section-heading">
+            <span className="comp-section-icon violet"><Sparkles size={21} /></span>
+            <div>
+              <h2>Molecular Similarity Search</h2>
+              <p>Compare an input structure against all molecules in the curated dataset.</p>
+            </div>
+            <span className="comp-step">MORGAN / Tanimoto</span>
+          </div>
+
+          <div className="comp-field">
+            <label htmlFor="similarity-smiles">Query SMILES</label>
+            <textarea
+              id="similarity-smiles"
+              rows={3}
+              value={similaritySmiles}
+              onChange={(event) => setSimilaritySmiles(event.target.value)}
+              placeholder="Enter a molecular SMILES structure, e.g. CCO"
+            />
+            <small>
+              The query is compared with the 20 dataset molecules using Morgan
+              radius-2 fingerprints and Tanimoto similarity.
+            </small>
+          </div>
+
+          <div className="comp-actions">
+            <button
+              type="button"
+              className="comp-prepare-button"
+              onClick={() => void runSimilarity()}
+              disabled={similarityLoading || engineStatus === "offline"}
+            >
+              {similarityLoading
+                ? <RefreshCw size={16} className="comp-loading-icon" />
+                : <Search size={16} />}
+              {similarityLoading ? "Searching..." : "Find Similar Molecules"}
+            </button>
+          </div>
+
+          {similarityError && (
+            <div className="comp-message comp-error" role="alert">
+              <CircleAlert size={17} /> {similarityError}
+            </div>
+          )}
+
+          {similarityResults.length > 0 && (
+            <div className="comp-results-section">
+              <div className="comp-results-heading">
+                <div>
+                  <h3>Similarity Results</h3>
+                  <p>{similarityResults.length} dataset matches · ranked by Tanimoto score</p>
+                </div>
+                <button type="button" className="comp-export-button" onClick={exportSimilarity}>
+                  <Download size={15} /> Export CSV
                 </button>
-              </article>
-            ))}
+              </div>
+
+              <div className="comp-similarity-list">
+                {similarityResults.map((item, index) => (
+                  <article className="comp-similarity-row" key={item.id}>
+                    <span className="comp-rank">{String(index + 1).padStart(2, "0")}</span>
+                    <div className="comp-similarity-details">
+                      <strong>{item.name}</strong>
+                      <small>{item.formula} · {item.category}</small>
+                      <div className="comp-similarity-track">
+                        <span style={{ width: `${item.similarity * 100}%` }} />
+                      </div>
+                    </div>
+                    <div className="comp-similarity-score">
+                      <strong>{(item.similarity * 100).toFixed(1)}%</strong>
+                      <small>Tanimoto</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="comp-dataset-footnote">
+                Similarity is a fingerprint-based structural comparison. It does
+                not establish equivalent biological activity or therapeutic effect.
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {activeTab === "screening" && (
+        <section className="comp-panel">
+          <div className="comp-section-heading">
+            <span className="comp-section-icon pink"><ShieldCheck size={21} /></span>
+            <div>
+              <h2>Lipinski Rule-of-Five Screening</h2>
+              <p>Evaluate common physicochemical cut-offs across the curated dataset.</p>
+            </div>
+            <span className="comp-step">RULE-BASED</span>
           </div>
-        )}
-      </section>
+
+          {screeningLoading && (
+            <div className="comp-loading-state">
+              <RefreshCw className="comp-loading-icon" size={24} />
+              <span>Screening molecular properties...</span>
+            </div>
+          )}
+
+          {screeningError && (
+            <div className="comp-message comp-error" role="alert">
+              <CircleAlert size={17} /> {screeningError}
+              <button type="button" onClick={() => void runScreening()}>Retry</button>
+            </div>
+          )}
+
+          {screening && (
+            <>
+              <div className="comp-screen-stats">
+                <div>
+                  <small>TOTAL SCREENED</small>
+                  <strong>{screening.total_molecules}</strong>
+                </div>
+                <div className="pass">
+                  <small>PASSING</small>
+                  <strong>{screening.passing}</strong>
+                </div>
+                <div className="fail">
+                  <small>FLAGGED</small>
+                  <strong>{screening.failing}</strong>
+                </div>
+              </div>
+
+              <div className="comp-rule-list">
+                <span>Screening criteria</span>
+                <div>MW ≤ 500 g/mol</div>
+                <div>LogP ≤ 5</div>
+                <div>H-bond donors ≤ 5</div>
+                <div>H-bond acceptors ≤ 10</div>
+              </div>
+
+              <div className="comp-selection-toolbar comp-screen-toolbar">
+                <span>{filteredScreening.length} results shown</span>
+                <div>
+                  <select
+                    className="comp-filter-select"
+                    value={screeningFilter}
+                    onChange={(event) =>
+                      setScreeningFilter(event.target.value as "all" | "pass" | "fail")
+                    }
+                    aria-label="Filter screening results"
+                  >
+                    <option value="all">All molecules</option>
+                    <option value="pass">Passing only</option>
+                    <option value="fail">Flagged only</option>
+                  </select>
+                  <button
+                    type="button"
+                    className="comp-export-button"
+                    onClick={exportScreening}
+                  >
+                    <Download size={15} /> Export CSV
+                  </button>
+                </div>
+              </div>
+
+              <div className="comp-table-wrap">
+                <table className="comp-data-table comp-screen-table">
+                  <thead>
+                    <tr>
+                      <th>Molecule</th>
+                      <th>MW</th>
+                      <th>LogP</th>
+                      <th>TPSA</th>
+                      <th>HBD</th>
+                      <th>HBA</th>
+                      <th>Result</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredScreening.map((item) => (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="comp-molecule-name">
+                            <strong>{item.name}</strong>
+                            <small>{item.id}</small>
+                          </div>
+                        </td>
+                        <td>{formatValue(item.molecular_weight, 2)}</td>
+                        <td>{formatValue(item.logp, 2)}</td>
+                        <td>{formatValue(item.tpsa, 2)}</td>
+                        <td>{item.h_bond_donors}</td>
+                        <td>{item.h_bond_acceptors}</td>
+                        <td>
+                          <span className={`comp-screen-badge ${item.passes ? "pass" : "fail"}`}>
+                            {item.passes
+                              ? <><CheckCircle2 size={13} /> Pass</>
+                              : <><XCircle size={13} /> Flagged</>}
+                          </span>
+                        </td>
+                        <td>{item.reasons.length ? item.reasons.join(", ") : "Within cut-offs"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="comp-dataset-footnote">
+                <CircleAlert size={15} />
+                {screening.explanation}
+              </div>
+            </>
+          )}
+        </section>
+      )}
 
       <footer className="comp-footer">
         <span>MOLECULELAB · COMPUTATIONAL CHEMISTRY</span>

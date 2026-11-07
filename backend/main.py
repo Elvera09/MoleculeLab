@@ -1,4 +1,5 @@
-
+import json
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -14,6 +15,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "http://localhost:5176",
+"http://127.0.0.1:5176",
         "https://molecule-lab-xi.vercel.app",
         "http://localhost:5173",
         "http://localhost:5174",
@@ -202,6 +205,143 @@ def screen(request: ScreenRequest):
 
     return {
         "results": results,
+        "explanation": (
+            "Rule-based screening using common Lipinski cut-offs. "
+            "Passing does not establish efficacy, safety or biological activity."
+        )
+    }
+@app.get("/dataset/analysis")
+def analyze_dataset():
+    dataset_path = Path(__file__).with_name("molecules.json")
+
+    if not dataset_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Molecular dataset not found."
+        )
+
+    try:
+        with open(dataset_path, "r", encoding="utf-8-sig") as file:
+            molecules = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(
+            status_code=500,
+            detail="Could not read the molecular dataset."
+        )
+
+    results = []
+
+    for item in molecules:
+        mol = parse(item["smiles"])
+
+        results.append({
+            **props(mol),
+            "id": item["id"],
+            "name": item["name"],
+            "category": item["category"]
+        })
+
+    return {
+        "dataset": "MoleculeLab Curated Dataset",
+        "total_molecules": len(results),
+        "results": results
+    }
+
+@app.post("/dataset/similarity")
+def dataset_similarity(request: MoleculeRequest):
+    query = parse(request.smiles)
+
+    query_fp = AllChem.GetMorganFingerprintAsBitVect(
+        query, 2, nBits=2048
+    )
+
+    dataset_path = Path(__file__).with_name("molecules.json")
+
+    with open(dataset_path, "r", encoding="utf-8-sig") as file:
+        molecules = json.load(file)
+
+    results = []
+
+    for item in molecules:
+        mol = parse(item["smiles"])
+
+        fingerprint = AllChem.GetMorganFingerprintAsBitVect(
+            mol, 2, nBits=2048
+        )
+
+        results.append({
+            "id": item["id"],
+            "name": item["name"],
+            "category": item["category"],
+            "formula": rdMolDescriptors.CalcMolFormula(mol),
+            "similarity": round(
+                float(DataStructs.TanimotoSimilarity(
+                    query_fp, fingerprint
+                )), 4
+            ),
+            "molecular_weight": Descriptors.MolWt(mol),
+            "logp": Crippen.MolLogP(mol)
+        })
+
+    results.sort(
+        key=lambda item: item["similarity"],
+        reverse=True
+    )
+
+    return {
+        "results": results,
+        "method": "Morgan radius-2 / 2048-bit / Tanimoto",
+        "dataset_size": len(results)
+    }
+
+
+@app.get("/dataset/screen")
+def dataset_screen():
+    dataset_path = Path(__file__).with_name("molecules.json")
+
+    with open(dataset_path, "r", encoding="utf-8-sig") as file:
+        molecules = json.load(file)
+
+    results = []
+
+    for item in molecules:
+        mol = parse(item["smiles"])
+
+        mw = Descriptors.MolWt(mol)
+        logp = Crippen.MolLogP(mol)
+        donors = Lipinski.NumHDonors(mol)
+        acceptors = Lipinski.NumHAcceptors(mol)
+
+        reasons = []
+
+        if mw > 500:
+            reasons.append("MW > 500")
+        if logp > 5:
+            reasons.append("LogP > 5")
+        if donors > 5:
+            reasons.append("HBD > 5")
+        if acceptors > 10:
+            reasons.append("HBA > 10")
+
+        results.append({
+            "id": item["id"],
+            "name": item["name"],
+            "category": item["category"],
+            "formula": rdMolDescriptors.CalcMolFormula(mol),
+            "molecular_weight": round(mw, 3),
+            "logp": round(logp, 4),
+            "tpsa": round(Descriptors.TPSA(mol), 3),
+            "h_bond_donors": donors,
+            "h_bond_acceptors": acceptors,
+            "passes": not reasons,
+            "reasons": reasons
+        })
+
+    return {
+        "results": results,
+        "total_molecules": len(results),
+        "passing": sum(1 for item in results if item["passes"]),
+        "failing": sum(1 for item in results if not item["passes"]),
         "explanation": (
             "Rule-based screening using common Lipinski cut-offs. "
             "Passing does not establish efficacy, safety or biological activity."

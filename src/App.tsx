@@ -210,22 +210,7 @@ function Sidebar({ close, researcherName }: { close?: () => void; researcherName
       </nav>
 
       <div className="sidebar-bottom">
-        <div className="usage-card">
-          <div className="usage-heading">
-            <Sparkles size={15} /> LAB STATUS
-          </div>
-
-          <div className="usage-copy">
-            Your molecular universe is taking shape.
-          </div>
-
-          <div className="usage-line">
-            <span />
-          </div>
-
-          <small>Cosmic foundation Ãƒâ€šÃ‚Â· v1.0</small>
-        </div>
-
+       
         <NavLink
           to="/settings"
           onClick={close}

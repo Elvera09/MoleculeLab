@@ -13,7 +13,9 @@ import {
 } from "lucide-react";
 import "./Intelligence.css";
 
-const API = "https://moleculelab.onrender.com";
+const API = (
+  import.meta.env.VITE_API_URL || "https://moleculelab.onrender.com"
+).replace(/\/$/, "");
 const EXAMPLES = [
   { name: "Aspirin", smiles: "CC(=O)OC1=CC=CC=C1C(=O)O" },
   { name: "Caffeine", smiles: "Cn1c(=O)c2c(ncn2C)n(C)c1=O" },
@@ -385,23 +387,6 @@ export default function Intelligence() {
         </div>
       )}
 
-      <section className="ai-panel ai-model">
-        <BrainCircuit size={25} />
-
-        <div>
-          <div className="ai-kicker">SUPERVISED ML MODEL STATUS</div>
-          <h2>Validated training data required</h2>
-
-          <p>
-            Scikit-learn is installed, but no labelled experimental dataset
-            or fitted QSAR model has been supplied. MoleculeLab will not
-            invent prediction scores. A real model can be trained and
-            evaluated when validated data is available.
-          </p>
-        </div>
-
-        <span>DATASET NEEDED</span>
-      </section>
 
       <footer className="ai-footer">
         MOLECULELAB · AI MOLECULAR INTELLIGENCE

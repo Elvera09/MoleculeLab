@@ -1,0 +1,122 @@
+[
+  {
+    "id": "ML001",
+    "name": "Water",
+    "category": "Inorganic",
+    "smiles": "O"
+  },
+  {
+    "id": "ML002",
+    "name": "Methane",
+    "category": "Organic",
+    "smiles": "C"
+  },
+  {
+    "id": "ML003",
+    "name": "Ethanol",
+    "category": "Alcohol",
+    "smiles": "CCO"
+  },
+  {
+    "id": "ML004",
+    "name": "Glucose",
+    "category": "Carbohydrate",
+    "smiles": "C(C1C(C(C(C(O1)O)O)O)O)O"
+  },
+  {
+    "id": "ML005",
+    "name": "Benzene",
+    "category": "Aromatic",
+    "smiles": "c1ccccc1"
+  },
+  {
+    "id": "ML006",
+    "name": "Aspirin",
+    "category": "Pharmaceutical",
+    "smiles": "CC(=O)OC1=CC=CC=C1C(=O)O"
+  },
+  {
+    "id": "ML007",
+    "name": "Caffeine",
+    "category": "Pharmaceutical",
+    "smiles": "Cn1c(=O)c2c(ncn2C)n(C)c1=O"
+  },
+  {
+    "id": "ML008",
+    "name": "Ibuprofen",
+    "category": "Pharmaceutical",
+    "smiles": "CC(C)CC1=CC=C(C=C1)C(C)C(=O)O"
+  },
+  {
+    "id": "ML009",
+    "name": "Paracetamol",
+    "category": "Pharmaceutical",
+    "smiles": "CC(=O)NC1=CC=C(O)C=C1"
+  },
+  {
+    "id": "ML010",
+    "name": "Naproxen",
+    "category": "Pharmaceutical",
+    "smiles": "COC1=CC2=CC=CC=C2C=C1C(C)C(=O)O"
+  },
+  {
+    "id": "ML011",
+    "name": "Benzoic Acid",
+    "category": "Organic Acid",
+    "smiles": "O=C(O)c1ccccc1"
+  },
+  {
+    "id": "ML012",
+    "name": "Theobromine",
+    "category": "Pharmaceutical",
+    "smiles": "Cn1c(=O)[nH]c2ncn(C)c2c1=O"
+  },
+  {
+    "id": "ML013",
+    "name": "Theophylline",
+    "category": "Pharmaceutical",
+    "smiles": "Cn1c(=O)c2[nH]cnc2n(C)c1=O"
+  },
+  {
+    "id": "ML014",
+    "name": "Phenacetin",
+    "category": "Pharmaceutical",
+    "smiles": "CCOc1ccc(NC(C)=O)cc1"
+  },
+  {
+    "id": "ML015",
+    "name": "Acetic Acid",
+    "category": "Organic Acid",
+    "smiles": "CC(=O)O"
+  },
+  {
+    "id": "ML016",
+    "name": "Benzaldehyde",
+    "category": "Aromatic",
+    "smiles": "O=Cc1ccccc1"
+  },
+  {
+    "id": "ML017",
+    "name": "Urea",
+    "category": "Organic",
+    "smiles": "NC(=O)N"
+  },
+  {
+    "id": "ML018",
+    "name": "Glycine",
+    "category": "Amino Acid",
+    "smiles": "NCC(=O)O"
+  },
+  {
+    "id": "ML019",
+    "name": "Lactic Acid",
+    "category": "Organic Acid",
+    "smiles": "CC(O)C(=O)O"
+  },
+  {
+    "id": "ML020",
+    "name": "Citric Acid",
+    "category": "Organic Acid",
+    "smiles": "OC(=O)CC(O)(CC(=O)O)C(=O)O"
+  }
+]
